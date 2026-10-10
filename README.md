@@ -48,6 +48,16 @@ Database: apply `supabase/migrations/*` with the Supabase CLI (`supabase db push
 3. Put the **Project URL** and **publishable key** in `.env`. Never put a secret key in the app.
 4. The free plan pauses a project after a week with no activity, so daily payments keep it awake. It has **no automatic backups**, which is why the nightly backup below exists.
 
+## Hosting: https://bari.rabtx.dev
+
+Cloudflare **Workers with static assets** (`wrangler.jsonc`); static requests are free.
+
+- Cloudflare dashboard → **Workers & Pages → Create → Import a repository** → `shabirkhan-dev/bari`. Build command `npm run build`, deploy command `npx wrangler deploy`. Every push to `main` then deploys.
+- `wrangler.jsonc` claims `bari.rabtx.dev` as a custom domain, and Cloudflare creates the DNS record itself. **Don't add a DNS record for it by hand**, or the deploy fails with a conflict.
+- `.env.production` is committed on purpose: the URL and publishable key are public (they're in the browser bundle); RLS protects the data.
+- `public/_headers` sets a strict Content-Security-Policy (only this site, Supabase and Google Fonts). When adding a new outside service (e.g. OCR), add it there first.
+- Unknown paths fall back to the app (`not_found_handling: single-page-application`), so invite links like `/join/ABCD2345` work.
+
 ## Nightly backup
 
 `.github/workflows/backup.yml` runs at 02:17 PKT. It dumps the database, **encrypts** the dump (AES-256), restores it into a throwaway Postgres to prove it works, and keeps it as a 90-day GitHub artifact.

@@ -4,5 +4,6 @@ dev-dist
 .env
 .env.*
 !.env.example
+!.env.production
 backups
 supabase/.temp
