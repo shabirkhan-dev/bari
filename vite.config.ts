@@ -10,16 +10,21 @@ export default defineConfig({
     VitePWA({
       // Updates install silently on next open — no reinstall for members.
       registerType: "autoUpdate",
+      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
-        name: "Committee OS",
-        short_name: "Committee",
-        description: "Bachat committee tracker — we manage the committee; JazzCash moves the money.",
+        name: "Bari",
+        short_name: "Bari",
+        description: "Har ek ki bari aati hai. Your bachat committee, kept honest.",
         lang: "en-PK",
         start_url: "/",
         display: "standalone",
-        background_color: "#0b1220",
-        theme_color: "#0b1220",
-        icons: []
+        background_color: "#0F5F4F",
+        theme_color: "#0F5F4F",
+        icons: [
+          { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+        ]
       }
     })
   ],

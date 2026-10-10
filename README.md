@@ -1,4 +1,6 @@
-# Committee OS
+# Bari · باری
+
+*Har ek ki bari aati hai.*
 
 Digital bachat committee manager for small private groups in Pakistan.
 **We manage the committee; JazzCash moves the money.** The app never holds funds, never asks for a JazzCash PIN, OTP or login, and never treats a receipt as money received.
@@ -42,8 +44,8 @@ Database: apply `supabase/migrations/*` with the Supabase CLI (`supabase db push
 ## Supabase setup (free plan)
 
 1. Create a project at supabase.com. Pick the **Singapore or Mumbai** region (closest to Pakistan).
-2. Apply `supabase/migrations/*` in order (SQL editor or `supabase db push`).
-3. Put the **Project URL** and **anon key** in `.env`. Never put the service-role key in the app.
+2. Migrations apply automatically: `.github/workflows/migrate.yml` runs `supabase db push` whenever `supabase/migrations/` changes on `main` (or run it by hand from the Actions tab). It uses the `SUPABASE_DB_URL` secret below.
+3. Put the **Project URL** and **publishable key** in `.env`. Never put a secret key in the app.
 4. The free plan pauses a project after a week with no activity, so daily payments keep it awake. It has **no automatic backups**, which is why the nightly backup below exists.
 
 ## Nightly backup
@@ -54,7 +56,7 @@ Repo secrets to add (Settings → Secrets and variables → Actions):
 
 | Secret | Value |
 |---|---|
-| `SUPABASE_DB_URL` | Supabase → Connect → **Session pooler** connection string (IPv4; GitHub runners can't use the IPv6 direct one) |
+| `SUPABASE_DB_URL` | Supabase → Connect → **Session pooler** connection string, with your database password filled in (IPv4; GitHub runners can't use the IPv6 direct one). If the password has symbols like `@ # / ?`, percent-encode them, or reset it to letters and digits only |
 | `BACKUP_PASSPHRASE` | A long random passphrase. **Store it somewhere safe; without it the backups can't be opened.** |
 
 Restore manually: `RESTORE_ADMIN_URL=… BACKUP_PASSPHRASE=… scripts/restore-check.sh file.gpg` (restores into a temporary database and checks row counts).
@@ -66,7 +68,7 @@ Receipt images live in Supabase Storage and are **not** in this backup yet (see 
 | Name | Purpose |
 |---|---|
 | `VITE_SUPABASE_URL` | Project URL |
-| `VITE_SUPABASE_ANON_KEY` | Public anon key (safe in the browser; RLS protects data) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` key (safe in the browser; RLS protects data). Never a `sb_secret_…` key |
 | `TEST_DATABASE_URL` | *Tests only.* Superuser URL of a throwaway Postgres 16 server |
 
 ## Tests

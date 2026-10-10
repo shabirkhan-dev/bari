@@ -3,8 +3,8 @@ import { z } from "zod";
 
 const Env = z.object({
   VITE_SUPABASE_URL: z.url().refine(u => u.startsWith("https://"), "Must be https"),
-  // The public anon key only. The service-role key must never reach the browser.
-  VITE_SUPABASE_ANON_KEY: z.string().min(20)
+  // Publishable key only (safe in the browser; RLS protects data). Secret keys must never reach the app.
+  VITE_SUPABASE_PUBLISHABLE_KEY: z.string().startsWith("sb_publishable_", "Use the publishable key, never a secret key")
 });
 
 const parsed = Env.safeParse(import.meta.env);
@@ -14,6 +14,6 @@ if (!parsed.success) {
   );
 }
 
-export const supabase = createClient(parsed.data.VITE_SUPABASE_URL, parsed.data.VITE_SUPABASE_ANON_KEY, {
+export const supabase = createClient(parsed.data.VITE_SUPABASE_URL, parsed.data.VITE_SUPABASE_PUBLISHABLE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
