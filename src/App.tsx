@@ -1,11 +1,12 @@
 import { createMemo, Errored, Loading, Match, refresh, Show, Switch } from "solid-js";
 import { fetchProfile, session, signOut } from "./lib/auth";
+import { describeError } from "./lib/errors";
 import { CompleteProfile, Login, Splash } from "./ui/SignIn";
 import { Mark } from "./ui/Mark";
 
 export default function App() {
   return (
-    <Errored fallback={(err, reset) => <Failure message={String(err())} retry={reset} />}>
+    <Errored fallback={(err, reset) => <Failure message={describeError(err())} retry={reset} />}>
       <Switch>
         <Match when={session() === undefined}>
           <Splash />

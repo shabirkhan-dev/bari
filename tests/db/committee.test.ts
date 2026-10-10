@@ -77,6 +77,27 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect(r.rowCount).toBe(0);
   });
 
+  it("repairs an account that signed in before its profile existed", async () => {
+    const early = randomUUID();
+    // Simulate signing in with Google before the schema (and its trigger) existed.
+    await db.query("alter table auth.users disable trigger on_auth_user_created");
+    await db.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2)", [early, { full_name: "Early Bird" }]);
+    await db.query("alter table auth.users enable trigger on_auth_user_created");
+    expect((await db.query("select 1 from profiles where id = $1", [early])).rowCount).toBe(0);
+
+    const asEarly = async (sql: string) => {
+      await db.query("begin");
+      await db.query("set local role authenticated");
+      await db.query("select set_config('request.jwt.claim.sub', $1, true)", [early]);
+      const r = await db.query(sql);
+      await db.query("commit");
+      return r;
+    };
+    await asEarly("select public.ensure_my_profile()");
+    await asEarly("select public.ensure_my_profile()"); // idempotent
+    expect((await asEarly("select display_name from profiles where id = auth.uid()")).rows).toEqual([{ display_name: "Early Bird" }]);
+  });
+
   it("rejects an inconsistent committee at the database level", async () => {
     await expect(rpc("owner", "create_committee", ["Bad", null, 5, 20000, "daily", null, 30, "2026-11-01",
       2500000, "Committee Account", "03001234567", null, 30000000, 30000000, null])).rejects.toThrow(/payout_is_consistent/);

@@ -2,6 +2,7 @@ import { createSignal, Show, untrack } from "solid-js";
 import { saveProfile, signInWithGoogle, type Profile } from "../lib/auth";
 import { formatPkMobile, normalizePkMobile } from "../domain/phone";
 import { Mark } from "./Mark";
+import { describeError } from "../lib/errors";
 
 export function Splash() {
   return (
@@ -21,7 +22,7 @@ export function Login() {
     try {
       await signInWithGoogle(); // navigates away to Google
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not start sign-in. Check your connection and try again.");
+      setError(describeError(e));
       setBusy(false);
     }
   };
@@ -78,7 +79,7 @@ export function CompleteProfile(props: { profile: Profile; onSaved: () => void }
       await saveProfile(untrack(() => props.profile.id), n, p);
       props.onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save. Try again.");
+      setError(describeError(err));
       setSaving(false);
     }
   };
