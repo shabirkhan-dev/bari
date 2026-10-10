@@ -76,3 +76,5 @@ export const dateShort = (d: LocalDate) => fmt({ day: "numeric", month: "short" 
 export const dateLong = (d: LocalDate) => fmt({ day: "numeric", month: "short", year: "numeric" })(d);
 /** "Mon, 30 Nov" */
 export const dateDay = (d: LocalDate) => fmt({ weekday: "short", day: "numeric", month: "short" })(d);
+/** "Mon" / "پیر" */
+export const weekday = (d: LocalDate) => fmt({ weekday: "short" })(d);

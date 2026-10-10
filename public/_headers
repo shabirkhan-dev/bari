@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://ohsisapfjtesxfzihqbt.supabase.co; connect-src 'self' https://ohsisapfjtesxfzihqbt.supabase.co wss://ohsisapfjtesxfzihqbt.supabase.co; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://ohsisapfjtesxfzihqbt.supabase.co; connect-src 'self' https://ohsisapfjtesxfzihqbt.supabase.co wss://ohsisapfjtesxfzihqbt.supabase.co; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
@@ -10,5 +10,7 @@
 
 /sw.js
   Cache-Control: no-cache
+/ocr/*
+  Cache-Control: public, max-age=2592000
 /index.html
   Cache-Control: no-cache

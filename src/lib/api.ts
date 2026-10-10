@@ -121,10 +121,12 @@ export interface Dashboard {
   current_round: number | null;
   rounds: DashboardRound[];
   members: DashboardMember[];
+  /** Payments waiting for this organizer's check (0 for members). */
+  pending_reviews: number;
 }
 
 export async function getDashboard(committeeId: string): Promise<Dashboard> {
-  const { data, error } = await supabase.rpc("committee_dashboard", { p_committee_id: committeeId });
+  const { data, error } = await supabase.rpc("committee_dashboard_v2", { p_committee_id: committeeId });
   if (error) fail(error);
   return data as Dashboard;
 }
@@ -153,4 +155,78 @@ export async function getHome(): Promise<HomeItem[]> {
   const { data, error } = await supabase.rpc("my_home");
   if (error) fail(error);
   return (data ?? []) as HomeItem[];
+}
+
+/* ───────────── Payments ───────────── */
+
+export interface Payable { id: string; due_date: string; amount_paisa: number; state: "due" | "rejected" }
+
+export async function myPayable(committeeId: string): Promise<Payable[]> {
+  const { data, error } = await supabase.rpc("my_payable", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return (data ?? []) as Payable[];
+}
+
+export async function submitPayment(p: {
+  memberId: string; obligationIds: string[]; amountPaisa: number; tid: string | null;
+  transferredAt: string | null; paidByName: string | null; requestId: string;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("submit_payment", {
+    p_member_id: p.memberId, p_obligation_ids: p.obligationIds, p_amount_paisa: p.amountPaisa,
+    p_tid: p.tid, p_transferred_at: p.transferredAt, p_paid_by_name: p.paidByName, p_note: null,
+    p_client_request_id: p.requestId
+  });
+  if (error) fail(error);
+  return data as string;
+}
+
+/** Upload to the private bucket, then register it against the submission. */
+export async function attachReceipt(committeeId: string, submissionId: string, r: { blob: Blob; mime: string; ext: string; sha256: string }) {
+  const path = `${committeeId}/${submissionId}/${r.sha256}.${r.ext}`;
+  const up = await supabase.storage.from("receipts").upload(path, r.blob, { contentType: r.mime, upsert: false });
+  if (up.error && !/exists/i.test(up.error.message)) fail(up.error);
+  const { error } = await supabase.rpc("attach_receipt", {
+    p_submission_id: submissionId, p_storage_path: path, p_mime_type: r.mime, p_size_bytes: r.blob.size, p_sha256: r.sha256
+  });
+  if (error) fail(error);
+}
+
+export interface ReviewItem {
+  id: string;
+  status: "pending" | "disputed";
+  member_id: string;
+  member_name: string;
+  member_phone: string | null;
+  submitted_by_name: string;
+  paid_by_name: string | null;
+  amount_paisa: number;
+  tid: string | null;
+  transferred_at: string | null;
+  created_at: string;
+  due_dates: string[];
+  receipt_path: string | null;
+  receipt_type: string | null;
+  can_decide: boolean;
+}
+
+export async function reviewQueue(committeeId: string): Promise<ReviewItem[]> {
+  const { data, error } = await supabase.rpc("review_queue", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return (data ?? []) as ReviewItem[];
+}
+
+export async function receiptUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 600);
+  if (error) fail(error);
+  return data!.signedUrl;
+}
+
+export async function verifySubmission(id: string, amountPaisa: number) {
+  const { error } = await supabase.rpc("verify_submission", { p_submission_id: id, p_confirmed_amount_paisa: amountPaisa });
+  if (error) fail(error);
+}
+
+export async function rejectSubmission(id: string, reason: string) {
+  const { error } = await supabase.rpc("reject_submission", { p_submission_id: id, p_reason: reason });
+  if (error) fail(error);
 }

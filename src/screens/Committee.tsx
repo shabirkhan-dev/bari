@@ -11,7 +11,8 @@ import {
   Avatar, Badge, Button, Card, ErrorNote, Money, Pill, Screen, Sheet, Skeleton, tick, useCopy
 } from "../ui/kit";
 import { MemberRing, type Seat, type SeatStatus } from "../ui/MemberRing";
-import { IconChat, IconCopy, IconPlus } from "../ui/icons";
+import { IconChat, IconCheck, IconChevron, IconClock, IconCopy, IconPlus } from "../ui/icons";
+import { navigate } from "../lib/router";
 
 export function Committee(props: { id: string }) {
   const dash = createMemo(() => getDashboard(props.id));
@@ -166,10 +167,22 @@ function Running(props: { d: Dashboard }) {
 
   return (
     <Screen backTo="/" title={props.d.committee.name} bottom={
-      <Button class="w-full" onClick={() => copy(props.d.committee.account_number)}>
-        <IconCopy />{copied() ? t("common.copied") : `${t("common.copy")} ${formatPkMobile(props.d.committee.account_number)}`}
-      </Button>
+      <div class="flex gap-3">
+        <button type="button" aria-label={t("pay.copyNumber")} onClick={() => { tick(); void copy(props.d.committee.account_number); }}
+          class="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink active:scale-95">
+          {copied() ? <IconCheck size={20} /> : <IconCopy />}
+        </button>
+        <Button class="flex-1" onClick={() => navigate(`/c/${props.d.committee.id}/pay`)}>{t("pay.paidButton")}</Button>
+      </div>
     }>
+      <Show when={props.d.pending_reviews > 0}>
+        <a href={`/c/${props.d.committee.id}/review`} onClick={e => { e.preventDefault(); tick(); navigate(`/c/${props.d.committee.id}/review`); }}
+          class="flex items-center gap-3 rounded-[24px] bg-warn-soft p-4 text-warn active:scale-[0.99]">
+          <span class="grid h-11 w-11 place-items-center rounded-full bg-surface"><IconClock size={20} /></span>
+          <span class="flex-1 text-[17px] font-semibold">{t("review.banner", { n: props.d.pending_reviews })}</span>
+          <span class="rtl:-scale-x-100"><IconChevron /></span>
+        </a>
+      </Show>
       <Show when={round()}>{r => (
         <section class="flex flex-col items-center gap-3 pt-1 text-center">
           <Pill class="bg-surface">{t("c.round", { n: r().round, total: props.d.rounds.length })}</Pill>

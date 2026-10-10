@@ -11,6 +11,9 @@ import { CreateCommittee } from "./screens/CreateCommittee";
 import { Committee } from "./screens/Committee";
 import { Join } from "./screens/Join";
 import { Me } from "./screens/Me";
+import { Pay } from "./screens/Pay";
+import { Review } from "./screens/Review";
+import { Share } from "./screens/Share";
 
 export default function App() {
   return (
@@ -58,6 +61,9 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
         <Match when={match("/join/:code", path())}>{p => <Join code={p().code ?? ""} />}</Match>
         <Match when={path() === "/join"}><Join /></Match>
         <Match when={match("/c/:id", path())}>{p => <Committee id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/pay", path())}>{p => <Pay id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/review", path())}>{p => <Review id={p().id ?? ""} />}</Match>
+        <Match when={path() === "/share"}><Share /></Match>
       </Switch>
       <Show when={isTab()}><Dock onAdd={() => setAdding(true)} /></Show>
       <Sheet open={adding()} onClose={() => setAdding(false)} label={t("tabs.add")}>

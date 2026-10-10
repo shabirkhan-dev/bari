@@ -156,6 +156,21 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     await expect(rpc("m4", "submit_payment", [members.m3, [ids[0]], 20000, null, null, null, null, randomUUID()])).rejects.toThrow(/your own/);
   });
 
+  it("lists what a member can pay, and gives organizers a review queue", async () => {
+    const payable = (await as("m4", "select public.my_payable($1) p", [committeeId])).rows[0].p;
+    expect(payable.length).toBe(15); // not started yet: first payment Nov 1 + 14 days = Nov 1–15
+    expect(payable[0]).toMatchObject({ due_date: "2026-11-01", amount_paisa: 20000, state: "due" });
+    expect((await as("outsider", "select public.my_payable($1) p", [committeeId])).rows[0].p).toEqual([]);
+
+    const q = (await as("owner", "select public.review_queue($1) q", [committeeId])).rows[0].q;
+    expect(q).toHaveLength(1);
+    expect(q[0]).toMatchObject({ id: m3Sub, member_name: "m3", amount_paisa: 40000, tid: "726755086850",
+      due_dates: ["2026-11-01", "2026-11-02"], can_decide: true, receipt_path: null });
+    expect((await as("m3", "select public.review_queue($1) q", [committeeId])).rows[0].q).toEqual([]); // not an organizer
+    expect((await as("owner", "select public.committee_dashboard_v2($1) d", [committeeId])).rows[0].d.pending_reviews).toBe(1);
+    expect((await as("m3", "select public.committee_dashboard_v2($1) d", [committeeId])).rows[0].d.pending_reviews).toBe(0);
+  });
+
   it("only organizers verify, never their own payment", async () => {
     await expect(rpc("m4", "verify_submission", [m3Sub, 40000])).rejects.toThrow(/organizers/);
     await rpc("owner", "verify_submission", [m3Sub, 40000]);

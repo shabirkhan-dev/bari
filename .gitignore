@@ -8,3 +8,4 @@ dev-dist
 backups
 supabase/.temp
 .wrangler
+public/ocr
