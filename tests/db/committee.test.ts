@@ -206,13 +206,24 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect(pickWinner([...r.eligible_member_ids].sort(), Number(r.random_value))).toBe(r.winner_member_id);
   });
 
-  it("blocks the payout until the whole pot is verified, then needs the recipient's confirmation", async () => {
-    await expect(rpc("owner", "record_payout", [roundId, 3000000, "333333333", "2026-11-30T21:00:00+05:00", null])).rejects.toThrow(/short by Rs 6000/);
-    const pending = (await as("m5", "select id from contribution_obligations where member_id = $1 and round = 1", [members.m5])).rows.map(r => r.id);
-    const sub = await rpc("m5", "submit_payment", [members.m5, pending, 600000, null, null, null, null, randomUUID()]);
-    await rpc("owner", "verify_submission", [sub, 600000]);
-    await expect(rpc("owner", "record_payout", [roundId, 2900000, null, "2026-11-30T21:00:00+05:00", null])).rejects.toThrow(/full pot/);
-    await rpc("owner", "record_payout", [roundId, 3000000, "333333333", "2026-11-30T21:00:00+05:00", null]);
+  it("shows the dashboard: who is behind, what's pending, which round", async () => {
+    // Toss day of round 1; m5 still owes all 30 days.
+    const d = (await as("m3", "select public.committee_dashboard($1) d", [committeeId])).rows[0].d;
+    expect(d.today).toBe("2026-11-30");
+    expect(d.current_round).toBe(1);
+    expect(d.rounds).toHaveLength(5);
+    expect(d.rounds[0]).toMatchObject({ round: 1, toss_date: "2026-11-30", status: "drawn" });
+    const m5 = d.members.find((m: any) => m.member_id === members.m5);
+    expect(m5).toMatchObject({ overdue_paisa: 580000, overdue_count: 29, today_state: "due", paid_out: false });
+    expect(d.members.filter((m: any) => m.paid_out)).toHaveLength(1);
+    await expect(as("outsider", "select public.committee_dashboard($1)", [committeeId])).rejects.toThrow(/Not a member/);
+  });
+
+  it("lets the organizer pay out a short pot (settled within the family), logging the shortfall", async () => {
+    await expect(rpc("owner", "record_payout", [roundId, 0, null, "2026-11-30T21:00:00+05:00", null])).rejects.toThrow(/amount/);
+    await rpc("owner", "record_payout", [roundId, 2400000, "333333333", "2026-11-30T21:00:00+05:00", null]);
+    const log = (await as("m3", "select details from audit_events where action = 'payout.recorded' and committee_id = $1", [committeeId])).rows[0].details;
+    expect(log).toMatchObject({ pot_paisa: 3000000, verified_paisa: 2400000, unverified_shortfall_paisa: 600000 });
 
     const winner = (await as("owner", "select winner_member_id from payout_rounds where id = $1", [roundId])).rows[0].winner_member_id;
     const winnerWho = Object.keys(members).find(k => members[k] === winner) as Who;

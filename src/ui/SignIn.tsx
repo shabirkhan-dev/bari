@@ -3,6 +3,7 @@ import { saveProfile, signInWithGoogle, type Profile } from "../lib/auth";
 import { formatPkMobile, normalizePkMobile } from "../domain/phone";
 import { Mark } from "./Mark";
 import { describeError } from "../lib/errors";
+import { rememberPath } from "../lib/router";
 
 export function Splash() {
   return (
@@ -20,6 +21,7 @@ export function Login() {
     setBusy(true);
     setError("");
     try {
+      if (location.pathname !== "/") rememberPath(location.pathname); // e.g. an invite link
       await signInWithGoogle(); // navigates away to Google
     } catch (e) {
       setError(describeError(e));

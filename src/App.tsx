@@ -1,8 +1,14 @@
-import { createMemo, Errored, Loading, Match, refresh, Show, Switch } from "solid-js";
-import { fetchProfile, session, signOut } from "./lib/auth";
+import { createMemo, Errored, Loading, Match, onSettled, refresh, Show, Switch } from "solid-js";
+import { fetchProfile, session, type Profile } from "./lib/auth";
 import { describeError } from "./lib/errors";
+import { match, navigate, path, takeRememberedPath } from "./lib/router";
 import { CompleteProfile, Login, Splash } from "./ui/SignIn";
-import { Mark } from "./ui/Mark";
+import { TabBar } from "./ui/kit";
+import { Home } from "./screens/Home";
+import { CreateCommittee } from "./screens/CreateCommittee";
+import { Committee } from "./screens/Committee";
+import { Join } from "./screens/Join";
+import { Me } from "./screens/Me";
 
 export default function App() {
   return (
@@ -25,32 +31,32 @@ function SignedIn(props: { userId: string }) {
   return (
     <Loading fallback={<Splash />}>
       <Show when={profile().phone} fallback={<CompleteProfile profile={profile()} onSaved={() => refresh(profile)} />}>
-        <Home name={profile().display_name} />
+        <Shell me={profile()} onProfileSaved={() => refresh(profile)} />
       </Show>
     </Loading>
   );
 }
 
-/** Placeholder until the committee screens land (next milestone). */
-function Home(props: { name: string }) {
+function Shell(props: { me: Profile; onProfileSaved: () => void }) {
+  // Back to the invite link someone opened before signing in.
+  onSettled(() => {
+    const p = takeRememberedPath();
+    if (p && p !== location.pathname) navigate(p, { replace: true, direction: "none" });
+  });
+
+  const isTab = () => path() === "/" || path() === "/me";
   return (
-    <main class="min-h-dvh bg-bari-ground px-6 pb-8 pt-[max(2rem,env(safe-area-inset-top))] text-bari-ink">
-      <div class="mx-auto flex max-w-sm flex-col gap-8">
-        <header class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <Mark size={36} />
-            <span class="text-xl font-bold tracking-tight">bari</span>
-          </div>
-          <button type="button" class="h-11 rounded-xl px-3 text-bari-muted" onClick={() => signOut()}>
-            Sign out
-          </button>
-        </header>
-        <div>
-          <h1 class="text-2xl font-semibold">Salam, {props.name}</h1>
-          <p class="mt-1 text-bari-muted">You're signed in. Committees arrive in the next update.</p>
-        </div>
-      </div>
-    </main>
+    <>
+      <Switch fallback={<Home />}>
+        <Match when={path() === "/"}><Home /></Match>
+        <Match when={path() === "/me"}><Me me={props.me} onSaved={props.onProfileSaved} /></Match>
+        <Match when={path() === "/new"}><CreateCommittee me={props.me} /></Match>
+        <Match when={match("/join/:code", path())}>{p => <Join code={p().code ?? ""} />}</Match>
+        <Match when={path() === "/join"}><Join /></Match>
+        <Match when={match("/c/:id", path())}>{p => <Committee id={p().id ?? ""} />}</Match>
+      </Switch>
+      <Show when={isTab()}><TabBar /></Show>
+    </>
   );
 }
 

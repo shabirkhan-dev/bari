@@ -4,12 +4,46 @@
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --color-bari-ink: #0e2a23;
   --color-bari-emerald: #0f5f4f;
+  --color-bari-emerald-dark: #0b4339;
   --color-bari-gold: #e0a526;
   --color-bari-ground: #f4f7f5;
   --color-bari-muted: #3d5650;
   --color-bari-line: #d3ddd9;
+  --color-bari-mint: #e3f1ec;
 }
 
+/* ── Feel like an installed app, not a web page ── */
 html {
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  background: #0b1f1a; /* outside the phone column on wide screens */
 }
+body {
+  overscroll-behavior: none; /* no pull-to-refresh / rubber-band on the page */
+  touch-action: manipulation; /* no double-tap zoom delay */
+}
+button, a, [role="tab"] {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+input, textarea { user-select: text; }
+:focus-visible { outline: 3px solid color-mix(in oklab, var(--color-bari-gold) 70%, white); outline-offset: 2px; }
+
+/* Mobile-only: on wider screens the app stays a phone-width column. */
+#root { max-width: 480px; margin: 0 auto; min-height: 100dvh; background: var(--color-bari-ground); position: relative; }
+
+/* ── Screen-to-screen slide, like a native navigation stack ── */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 260ms; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+html[data-nav="forward"]::view-transition-old(root) { animation-name: bari-out-left; }
+html[data-nav="forward"]::view-transition-new(root) { animation-name: bari-in-right; }
+html[data-nav="back"]::view-transition-old(root) { animation-name: bari-out-right; }
+html[data-nav="back"]::view-transition-new(root) { animation-name: bari-in-left; }
+::view-transition-group(tabbar) { animation: none; } /* tab bar stays put */
+@keyframes bari-in-right { from { transform: translateX(100%); } }
+@keyframes bari-out-left { to { transform: translateX(-28%); opacity: 0.6; } }
+@keyframes bari-in-left { from { transform: translateX(-28%); opacity: 0.6; } }
+@keyframes bari-out-right { to { transform: translateX(100%); } }
+
+@keyframes bari-pulse { 50% { opacity: 0.45; } }
+.skeleton { background: var(--color-bari-line); border-radius: 12px; animation: bari-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
