@@ -9,3 +9,5 @@ backups
 supabase/.temp
 .wrangler
 public/ocr
+test-results
+playwright-report

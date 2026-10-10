@@ -1,3 +1,4 @@
+import { freshness } from "../lib/live";
 import { createMemo, createSignal, Errored, For, Loading, refresh, Show } from "solid-js";
 import { receiptUrl, rejectSubmission, reviewQueue, verifySubmission, type ReviewItem } from "../lib/api";
 import { describeError } from "../lib/errors";
@@ -6,7 +7,7 @@ import { Avatar, Badge, Button, Card, ErrorNote, inputClass, Money, Screen, Shee
 import { IconCheck, IconCopy } from "../ui/icons";
 
 export function Review(props: { id: string }) {
-  const queue = createMemo(() => reviewQueue(props.id));
+  const queue = createMemo(() => { freshness(); return reviewQueue(props.id); });
   const [rejecting, setRejecting] = createSignal<ReviewItem | null>(null);
   const reload = () => refresh(queue);
 

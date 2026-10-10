@@ -14,6 +14,10 @@ import { Me } from "./screens/Me";
 import { Pay } from "./screens/Pay";
 import { Review } from "./screens/Review";
 import { Share } from "./screens/Share";
+import { Settings } from "./screens/Settings";
+import { Activity } from "./screens/Activity";
+import { Round } from "./screens/Round";
+import { Inbox } from "./screens/Inbox";
 
 export default function App() {
   return (
@@ -62,6 +66,11 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
         <Match when={path() === "/join"}><Join /></Match>
         <Match when={match("/c/:id", path())}>{p => <Committee id={p().id ?? ""} />}</Match>
         <Match when={match("/c/:id/pay", path())}>{p => <Pay id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/pay/:member", path())}>{p => <Pay id={p().id ?? ""} memberId={p().member ?? ""} />}</Match>
+        <Match when={match("/c/:id/settings", path())}>{p => <Settings id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/activity", path())}>{p => <Activity id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/round/:n", path())}>{p => <Round id={p().id ?? ""} n={Number(p().n)} />}</Match>
+        <Match when={path() === "/inbox"}><Inbox /></Match>
         <Match when={match("/c/:id/review", path())}>{p => <Review id={p().id ?? ""} />}</Match>
         <Match when={path() === "/share"}><Share /></Match>
       </Switch>

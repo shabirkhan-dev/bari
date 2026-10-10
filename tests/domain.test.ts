@@ -185,3 +185,19 @@ describe("phone", () => {
   });
   it("formats for display", () => expect(formatPkMobile("03001234567")).toBe("0300 1234567"));
 });
+
+import { describeError } from "../src/lib/errors";
+import { setLang } from "../src/i18n";
+
+describe("error messages", () => {
+  it("translates known server errors and keeps unknown ones", () => {
+    setLang("en");
+    expect(describeError({ message: "Invitation code is invalid or expired", code: "P0001" })).toMatch(/wrong or has expired/);
+    expect(describeError(new Error("Need 5 members, have 3"))).toBe("Waiting for everyone to join: 3 of 5.");
+    expect(describeError(new TypeError("Failed to fetch"))).toMatch(/No internet/);
+    expect(describeError({ message: "Something new" })).toBe("Something new");
+    setLang("ur");
+    expect(describeError({ message: "Committee is full" })).toBe("یہ کمیٹی پوری ہو چکی ہے۔");
+    setLang("en");
+  });
+});

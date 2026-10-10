@@ -1,5 +1,7 @@
+import { freshness } from "../lib/live";
 import { createMemo, Errored, For, Loading, Match, Show, Switch } from "solid-js";
-import { getHome, type HomeItem } from "../lib/api";
+import { getHome, unreadCount, type HomeItem } from "../lib/api";
+import { unreadStamp } from "../lib/unread";
 import { navigate } from "../lib/router";
 import { describeError } from "../lib/errors";
 import type { Profile } from "../lib/auth";
@@ -9,10 +11,10 @@ import { dateShort, money, t } from "../i18n";
 import { Avatar, Badge, Button, ErrorNote, Money, Skeleton, TabScreen, tick } from "../ui/kit";
 import { MemberRing } from "../ui/MemberRing";
 import { LangSwitch } from "../ui/SignIn";
-import { IconCheck, IconChevron } from "../ui/icons";
+import { IconBell, IconCheck, IconChevron } from "../ui/icons";
 
 export function Home(props: { me: Profile }) {
-  const items = createMemo(() => getHome());
+  const items = createMemo(() => { freshness(); return getHome(); });
   const firstName = () => props.me.display_name.split(/\s+/)[0] ?? props.me.display_name;
   const owed = () => items().filter(i => i.status === "active").reduce((s, i) => s + i.due_today_paisa + i.overdue_paisa, 0);
   const late = () => items().reduce((s, i) => s + i.overdue_paisa, 0);
@@ -24,6 +26,7 @@ export function Home(props: { me: Profile }) {
           <Avatar name={props.me.display_name} size={48} />
         </a>
         <p class="min-w-0 flex-1 truncate text-lg font-semibold">{t("home.greeting", { name: firstName() })}</p>
+        <Bell />
         <LangSwitch />
       </header>
 
@@ -115,4 +118,19 @@ function Empty() {
       <p class="text-sm text-ink-3">{t("home.how")}</p>
     </div>
   );
+}
+
+function Bell() {
+  const count = createMemo(() => { unreadStamp(); freshness(); return unreadCount().catch(() => 0); });
+  const icon = (n: number) => (
+    <a href="/inbox" aria-label={n > 0 ? `${t("inbox.title")} (${n})` : t("inbox.title")}
+      onClick={e => { e.preventDefault(); tick(); navigate("/inbox"); }}
+      class="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink active:scale-95">
+      <IconBell />
+      <Show when={n > 0}>
+        <span class="num absolute -end-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-late px-1 text-[11px] font-bold text-white">{n > 9 ? "9+" : n}</span>
+      </Show>
+    </a>
+  );
+  return <Loading fallback={icon(0)}>{icon(count())}</Loading>;
 }

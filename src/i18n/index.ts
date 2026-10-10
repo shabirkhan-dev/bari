@@ -11,7 +11,7 @@ function initial(): Lang {
     const saved = localStorage.getItem(KEY);
     if (saved === "en" || saved === "ur") return saved;
   } catch { /* storage blocked */ }
-  return navigator.language?.startsWith("ur") ? "ur" : "en";
+  return typeof navigator !== "undefined" && navigator.language?.startsWith("ur") ? "ur" : "en";
 }
 
 const [lang, setLangSignal] = createSignal<Lang>(initial());
@@ -19,6 +19,7 @@ export { lang };
 
 let fontLoaded = false;
 function apply(l: Lang) {
+  if (typeof document === "undefined") return; // tests / non-browser
   const html = document.documentElement;
   html.lang = l;
   html.dir = l === "ur" ? "rtl" : "ltr";

@@ -19,13 +19,13 @@ Digital bachat committee manager for small private groups in Pakistan.
 | Payout = members × periods × contribution | `committees.payout_is_consistent` check + Zod |
 | Due → Submitted → Verified; "Overdue" derived from date, never stored | `src/domain/ledger.ts`, RPCs |
 | A missed day can be paid any time up to toss day (e.g. on the weekend) | one transfer can cover several days via `payment_allocations` |
-| A relative can pay on a member's behalf | organizer submits for the member with `paid_by_name` |
+| A relative can pay on a member's behalf | member ticks "someone else paid", or an organizer records it for them |
 | On toss day, anyone with unverified dues is **left out of that toss only** | `toss_eligibility()` |
 | A member wins once, keeps paying afterwards | `one_win_per_member` index |
 | Toss: in-app crypto draw (inputs stored, re-checkable) or record a physical toss | `draw_toss(…, 'app' \| 'manual')` |
-| Payout only when the round's full pot is verified | `record_payout()` |
+| Late or missing money is settled within the family; the app reminds (WhatsApp) and never blocks a payout, but a short pot is recorded in the audit log | `record_payout()` |
 | Recipient confirms receipt (second confirmation) | `confirm_payout()` |
-| Organizers verify; nobody verifies their own payment | `verify_submission()` |
+| Organizers verify; nobody verifies their own payment (so appoint a co-organizer) | `verify_submission()` |
 | Same TID or same receipt image can't back two claims | partial unique index / `sha256` unique |
 | Every sensitive change is audited; audit log is read-only | `audit_events` |
 
@@ -84,27 +84,55 @@ Receipt images live in Supabase Storage and are **not** in this backup yet (see 
 ## Tests
 
 ```bash
-npm test                                     # domain logic (no DB needed)
-TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres npm test   # + full DB lifecycle
+npm test                         # unit tests (money, dates, schedules, receipt parser, errors)
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres npm test   # + database suite
+npm run test:e2e                 # end-to-end: production build in mobile Chrome, Supabase mocked
 ```
 
-The DB suite creates a temporary database, runs the real migration against a small Supabase `auth` stand-in (`tests/db/supabase-stub.sql`), plays a full first round with five users (joins, catch-up transfers, rejection, family payment, toss with a member in arrears, payout, recipient confirmation), checks RLS, and drops the database afterwards. It also checks that Postgres generates exactly the same 150-day schedule as the TypeScript code.
+- **Database suite** (`tests/db`): runs every migration on a throwaway Postgres with a Supabase `auth` stand-in and plays a whole round with real users: joining, catch-up transfers, rejection, a relative paying, the toss with a member in arrears, a short payout, recipient confirmation, settings and leaving, plus RLS (outsiders see nothing; nobody writes tables directly). It also checks Postgres builds exactly the same schedule as the TypeScript.
+- **End-to-end suite** (`tests/e2e`): sign-in (English/Urdu, RTL), home, notifications, creating a committee (exact request), paying with **on-device OCR of a rendered receipt**, recording for a member, review, **JazzCash share target through the service worker**, toss draw with verification, payout, settings, activity.
+- CI (`.github/workflows/test.yml`) runs typecheck, unit, database and end-to-end tests on every push and pull request.
+
+## Screens and states (for design)
+
+| Route | Screen | States to design |
+|---|---|---|
+| `/` signed out | Sign in | default, opening Google, error · English/Urdu |
+| first sign-in | One quick step | empty, filled, validation error |
+| `/` | Home | committees list, nothing due ("all paid up"), due + late, empty (no committees), loading |
+| `/inbox` | Notifications | unread/read, empty |
+| `/new` | New committee | daily/weekly/monthly/custom, live summary, validation errors |
+| `/join`, `/join/CODE` | Join | empty, code filled, wrong/expired code, full |
+| `/c/:id` forming | Committee (forming) | seats filling, invite code, full → Start, start confirmation sheet, member view |
+| `/c/:id` running | Committee (running) | ring with seat statuses, banners (to check, toss due, confirm payout, limits), my status (late/due/checking/paid/not started), members with Remind / Record payment, rounds |
+| `/c/:id/pay` | Record a payment | day picker, receipt reading/read/failed/mismatch, someone else paid, sending, sent |
+| `/c/:id/pay/:member` | Record for a member | as above, titled for the member |
+| `/c/:id/review` | Payments to check | items with/without receipt, own payment (can't decide), reject sheet, empty |
+| `/c/:id/round/:n` | Round | before toss (in/out lists, not yet, draw sheets), after draw (winner, verification), payout form (with shortfall note), waiting for recipient, recipient confirm/problem, received, disputed |
+| `/c/:id/settings` | Settings | organizer form, schedule locked, members & roles, invite codes, leave |
+| `/c/:id/activity` | Activity | list, empty |
+| `/me` | Profile | language, appearance, profile form |
+| `/share` | Shared receipt | pick committee, nothing arrived, no running committee |
 
 ## Status
 
-- [x] Milestone 1: schema, RLS, transactional RPCs, domain logic, 31 tests
-- [x] Nightly encrypted backup with automatic restore check (tested locally; runs in CI once secrets are set)
-- [ ] Milestone 2: Supabase project + auth wiring (client ready; waiting on project keys)
-- [ ] Milestone 3: screens (dashboard, submit receipt, verification queue, ledger, toss, payouts)
-- [ ] Milestone 4: PWA share target for JazzCash receipt images, in-browser OCR (Tesseract)
-- [ ] Milestone 5: reconciliation report, backups, pilot
+- [x] Schema, RLS, transactional money rules, 44 database + unit tests
+- [x] Supabase + Google sign-in, live at https://bari.rabtx.dev
+- [x] Committees: create, invite, join, start, settings, co-organizers, leave/remove (before start), activity log
+- [x] Payments: pick days, receipt with on-device OCR, Android share target, record for a member, organizer review
+- [x] Toss (in-app verifiable draw or in-person record), payout, recipient confirmation or dispute
+- [x] Notifications, WhatsApp reminders, JazzCash monthly-limit warnings, English/Urdu, light/dark
+- [x] Nightly encrypted backup with restore check; CI on every push
+- [ ] Visual design pass from Figma
+- [ ] Push notifications (in-app only for now)
+- [ ] Receipt images in the backup
 
-## Known limitations / open questions
+## Known limitations
 
-- **Short pot after a toss.** A member left out of the toss still owes the round. The payout stays blocked until their share is verified (or someone pays for them). Confirm this is what the committee wants.
-- **Member who already won and then stops paying**: no rule implemented yet.
-- **Receipt images aren't backed up yet**; only the database is. Their SHA-256 hashes are, so tampering is detectable. A weekly copy to Cloudflare R2 is planned.
-- **Storage policies** (`…_storage.sql`) use Supabase's `storage` schema and aren't covered by the local DB tests.
+- **Receipt images aren't backed up yet**; only the database is. Their SHA-256 hashes are, so tampering is detectable.
+- **Storage policies** (`…_storage.sql`) use Supabase's `storage` schema and aren't covered by the local database tests.
 - **Share target** works only when the PWA is installed through Chrome on Android. iPhone users upload a screenshot instead.
-- The sample receipt was a **1Bill payment**. A real committee transfer receipt still needs testing against the parser.
-- Account limits (Rs 3 lakh/month in and out, as configured by the organizer) only produce warnings. The app can't see the real account.
+- The OCR has been checked on a 1Bill receipt and a rendered transfer receipt; a real JazzCash **money-transfer** share still needs a check on a phone.
+- **Phone numbers are visible to fellow members** (needed for WhatsApp reminders).
+- Account limits only produce warnings from the organizer's own numbers. The app can't see the real account.
+- Reminders are in-app plus one-tap WhatsApp; the app never sends messages by itself.

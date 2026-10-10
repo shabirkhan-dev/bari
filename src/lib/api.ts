@@ -123,6 +123,15 @@ export interface Dashboard {
   members: DashboardMember[];
   /** Payments waiting for this organizer's check (0 for members). */
   pending_reviews: number;
+  /** This PKT calendar month, for JazzCash limit warnings. */
+  month: {
+    receive_limit_paisa: number | null;
+    send_limit_paisa: number | null;
+    received_paisa: number;
+    expected_paisa: number;
+    sent_paisa: number;
+    payouts_due_paisa: number;
+  };
 }
 
 export async function getDashboard(committeeId: string): Promise<Dashboard> {
@@ -163,6 +172,13 @@ export interface Payable { id: string; due_date: string; amount_paisa: number; s
 
 export async function myPayable(committeeId: string): Promise<Payable[]> {
   const { data, error } = await supabase.rpc("my_payable", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return (data ?? []) as Payable[];
+}
+
+/** Payable days of any member (organizers recording on someone's behalf). */
+export async function memberPayable(memberId: string): Promise<Payable[]> {
+  const { data, error } = await supabase.rpc("member_payable", { p_member_id: memberId });
   if (error) fail(error);
   return (data ?? []) as Payable[];
 }
@@ -228,5 +244,127 @@ export async function verifySubmission(id: string, amountPaisa: number) {
 
 export async function rejectSubmission(id: string, reason: string) {
   const { error } = await supabase.rpc("reject_submission", { p_submission_id: id, p_reason: reason });
+  if (error) fail(error);
+}
+
+/* ───────────── Settings & membership ───────────── */
+
+export interface CommitteeEdit {
+  name: string; description: string | null; instructions: string | null; startDate: string;
+  accountTitle: string; accountNumber: string; receiveLimitPaisa: number | null; sendLimitPaisa: number | null;
+}
+
+export async function updateCommittee(id: string, e: CommitteeEdit) {
+  const { error } = await supabase.rpc("update_committee", {
+    p_committee_id: id, p_name: e.name, p_description: e.description, p_instructions: e.instructions,
+    p_start_date: e.startDate, p_account_title: e.accountTitle, p_account_number: e.accountNumber,
+    p_monthly_receive_limit_paisa: e.receiveLimitPaisa, p_monthly_send_limit_paisa: e.sendLimitPaisa
+  });
+  if (error) fail(error);
+}
+
+export async function setMemberRole(memberId: string, role: "organizer" | "member") {
+  const { error } = await supabase.rpc("set_member_role", { p_member_id: memberId, p_role: role });
+  if (error) fail(error);
+}
+
+export async function removeMember(memberId: string) {
+  const { error } = await supabase.rpc("remove_member", { p_member_id: memberId });
+  if (error) fail(error);
+}
+
+export async function leaveCommittee(committeeId: string) {
+  const { error } = await supabase.rpc("leave_committee", { p_committee_id: committeeId });
+  if (error) fail(error);
+}
+
+export async function revokeInvitations(committeeId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("revoke_invitations", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return data as number;
+}
+
+export interface AuditEntry { id: number; action: string; actor_name: string | null; details: Record<string, unknown>; created_at: string }
+
+export async function auditFeed(committeeId: string): Promise<AuditEntry[]> {
+  const { data, error } = await supabase.rpc("audit_feed", { p_committee_id: committeeId, p_limit: 200 });
+  if (error) fail(error);
+  return (data ?? []) as AuditEntry[];
+}
+
+/* ───────────── Toss & payout ───────────── */
+
+export interface Eligibility { member_id: string; eligible: boolean; reason: "already_paid_out" | "arrears" | null; arrears_paisa: number }
+
+export async function tossEligibility(committeeId: string, round: number): Promise<Eligibility[]> {
+  const { data, error } = await supabase.rpc("toss_eligibility", { p_committee_id: committeeId, p_round: round });
+  if (error) fail(error);
+  return (data ?? []) as Eligibility[];
+}
+
+export async function drawToss(committeeId: string, round: number, method: "app" | "manual", winner?: string): Promise<string> {
+  const { data, error } = await supabase.rpc("draw_toss", { p_committee_id: committeeId, p_round: round, p_method: method, p_manual_winner: winner ?? null });
+  if (error) fail(error);
+  return data as string;
+}
+
+export interface PayoutRound {
+  id: string; round: number; toss_date: string; draw_method: "app" | "manual";
+  eligible_member_ids: string[]; excluded: { member_id: string; reason: string; arrears_paisa: number }[];
+  random_value: number | null; winner_member_id: string; drawn_at: string;
+  status: "drawn" | "paid" | "confirmed" | "disputed";
+  payout: PayoutRecord | null;
+}
+
+export interface PayoutRecord { amount_paisa: number; tid: string | null; paid_at: string; confirmed_at: string | null; dispute_reason: string | null }
+
+export async function payoutRound(committeeId: string, round: number): Promise<PayoutRound | null> {
+  const { data, error } = await supabase
+    .from("payout_rounds")
+    .select("id, round, toss_date, draw_method, eligible_member_ids, excluded, random_value, winner_member_id, drawn_at, status, payout_records(amount_paisa, tid, paid_at, confirmed_at, dispute_reason)")
+    .eq("committee_id", committeeId).eq("round", round).maybeSingle();
+  if (error) fail(error);
+  if (!data) return null;
+  // payout_records is one-to-one with its round: the API returns an object (older versions: an array).
+  const { payout_records, ...rest } = data as unknown as Omit<PayoutRound, "payout"> & { payout_records: PayoutRecord | PayoutRecord[] | null };
+  const payout = Array.isArray(payout_records) ? payout_records[0] ?? null : payout_records;
+  return { ...rest, payout };
+}
+
+export async function recordPayout(roundId: string, amountPaisa: number, tid: string | null, paidAt: string) {
+  const { error } = await supabase.rpc("record_payout", { p_payout_round_id: roundId, p_amount_paisa: amountPaisa, p_tid: tid, p_paid_at: paidAt, p_evidence_path: null });
+  if (error) fail(error);
+}
+
+export async function confirmPayout(roundId: string, received: boolean, reason?: string) {
+  const { error } = await supabase.rpc("confirm_payout", { p_payout_round_id: roundId, p_received: received, p_reason: reason ?? null });
+  if (error) fail(error);
+}
+
+/* ───────────── Notifications ───────────── */
+
+export interface Notice {
+  id: string; kind: string; payload: Record<string, unknown>; read_at: string | null; created_at: string;
+  committee_id: string | null; committees: { name: string } | null;
+}
+
+export async function listNotifications(): Promise<Notice[]> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("id, kind, payload, read_at, created_at, committee_id, committees(name)")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) fail(error);
+  return (data ?? []) as unknown as Notice[];
+}
+
+export async function unreadCount(): Promise<number> {
+  const { count, error } = await supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null);
+  if (error) fail(error);
+  return count ?? 0;
+}
+
+export async function markAllRead() {
+  const { error } = await supabase.from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null);
   if (error) fail(error);
 }

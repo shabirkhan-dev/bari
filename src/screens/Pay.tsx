@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Errored, For, Loading, Match, onSettled, Show, Switch } from "solid-js";
-import { attachReceipt, getDashboard, myPayable, submitPayment, type Payable } from "../lib/api";
+import { attachReceipt, getDashboard, memberPayable, myPayable, submitPayment, type Payable } from "../lib/api";
 import { describeError } from "../lib/errors";
 import { navigate } from "../lib/router";
 import { prepareReceipt, readReceipt, ReceiptError, type PreparedReceipt } from "../lib/receipt";
@@ -10,13 +10,15 @@ import { dateShort, lang, money, t, weekday } from "../i18n";
 import { Badge, Button, Card, ErrorNote, Field, inputClass, Money, Screen, Skeleton, tick } from "../ui/kit";
 import { IconCheck, IconPlus } from "../ui/icons";
 
-export function Pay(props: { id: string }) {
+/** `memberId` set: an organizer recording a payment on that member's behalf. */
+export function Pay(props: { id: string; memberId?: string }) {
   const dash = createMemo(() => getDashboard(props.id));
-  const payable = createMemo(() => myPayable(props.id));
+  const payable = createMemo(() => (props.memberId ? memberPayable(props.memberId) : myPayable(props.id)));
+  const forName = () => (props.memberId ? dash().members.find(m => m.member_id === props.memberId)?.name : undefined);
   return (
     <Errored fallback={err => <Screen backTo={`/c/${props.id}`}><ErrorNote message={describeError(err())} /></Screen>}>
       <Loading fallback={<Screen backTo={`/c/${props.id}`} title={t("pay.title")}><Skeleton lines={3} /></Screen>}>
-        <PayForm committeeId={props.id} memberId={dash().me.member_id} items={payable()} />
+        <PayForm committeeId={props.id} memberId={props.memberId ?? dash().me.member_id} forName={forName()} items={payable()} />
       </Loading>
     </Errored>
   );
@@ -24,7 +26,7 @@ export function Pay(props: { id: string }) {
 
 type OcrState = "idle" | "reading" | "done" | "failed";
 
-function PayForm(props: { committeeId: string; memberId: string; items: Payable[] }) {
+function PayForm(props: { committeeId: string; memberId: string; forName?: string; items: Payable[] }) {
   const today = todayInPKT();
   const requestId = crypto.randomUUID(); // same id on retry → no duplicate payment
   const [picked, setPicked] = createSignal<Record<string, boolean> | null>(null);
@@ -121,7 +123,7 @@ function PayForm(props: { committeeId: string; memberId: string; items: Payable[
         </section>
       </Screen>
     }>
-      <Screen backTo={back} title={t("pay.title")} bottom={
+      <Screen backTo={back} title={props.forName ? t("payOn.title", { name: props.forName }) : t("pay.title")} bottom={
         <Button class="w-full" disabled={busy() || selection().length === 0} onClick={submit}>
           {busy() ? t("pay.sending") : t("pay.send")}
         </Button>

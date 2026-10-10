@@ -1,3 +1,4 @@
+import { freshness } from "../lib/live";
 import { createMemo, createSignal, Errored, For, Loading, Match, refresh, Show, Switch } from "solid-js";
 import {
   activateCommittee, createInvitation, getDashboard, latestInvitation,
@@ -11,11 +12,11 @@ import {
   Avatar, Badge, Button, Card, ErrorNote, Money, Pill, Screen, Sheet, Skeleton, tick, useCopy
 } from "../ui/kit";
 import { MemberRing, type Seat, type SeatStatus } from "../ui/MemberRing";
-import { IconChat, IconCheck, IconChevron, IconClock, IconCopy, IconPlus } from "../ui/icons";
+import { IconChat, IconCheck, IconChevron, IconClock, IconCopy, IconGear, IconPlus, IconWallet } from "../ui/icons";
 import { navigate } from "../lib/router";
 
 export function Committee(props: { id: string }) {
-  const dash = createMemo(() => getDashboard(props.id));
+  const dash = createMemo(() => { freshness(); return getDashboard(props.id); });
   return (
     <Errored fallback={err => <Screen backTo="/"><ErrorNote message={describeError(err())} /></Screen>}>
       <Loading fallback={<Screen backTo="/"><Skeleton lines={4} /></Screen>}>
@@ -82,7 +83,8 @@ function Forming(props: { d: Dashboard; onChange: () => void }) {
   const seats = (): Seat[] => props.d.members.map(m => ({ name: m.name, status: "none", self: m.member_id === props.d.me.member_id }));
 
   return (
-    <Screen backTo="/" bottom={
+    <Screen backTo="/" action={<button type="button" aria-label={t("c.settings")} onClick={() => { tick(); navigate(`/c/${props.d.committee.id}/settings`); }}
+      class="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink active:scale-95"><IconGear /></button>} bottom={
       <Show when={isOrganizer(props.d)} fallback={<p class="pb-2 text-center text-[15px] text-ink-2">{t("c.organizerWillStart")}</p>}>
         <Show when={full()} fallback={<Button class="w-full" onClick={share} trailing={<IconPlus size={14} />}>{t("c.shareInvite")}</Button>}>
           <Button class="w-full" onClick={() => setConfirm(true)}>{t("c.start")}</Button>
@@ -166,7 +168,8 @@ function Running(props: { d: Dashboard }) {
   const tossIn = () => (round() ? daysBetween(props.d.today, round()!.toss_date) : 0);
 
   return (
-    <Screen backTo="/" title={props.d.committee.name} bottom={
+    <Screen backTo="/" title={props.d.committee.name} action={<button type="button" aria-label={t("c.settings")} onClick={() => { tick(); navigate(`/c/${props.d.committee.id}/settings`); }}
+      class="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink active:scale-95"><IconGear /></button>} bottom={props.d.committee.status !== "active" ? undefined :
       <div class="flex gap-3">
         <button type="button" aria-label={t("pay.copyNumber")} onClick={() => { tick(); void copy(props.d.committee.account_number); }}
           class="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink active:scale-95">
@@ -183,6 +186,7 @@ function Running(props: { d: Dashboard }) {
           <span class="rtl:-scale-x-100"><IconChevron /></span>
         </a>
       </Show>
+      <Banners d={props.d} />
       <Show when={round()}>{r => (
         <section class="flex flex-col items-center gap-3 pt-1 text-center">
           <Pill class="bg-surface">{t("c.round", { n: r().round, total: props.d.rounds.length })}</Pill>
@@ -253,6 +257,8 @@ function MemberRow(props: { d: Dashboard; m: DashboardMember }) {
   const canRemind = () => isOrganizer(props.d) && !self() && !!props.m.phone && (status() === "late" || status() === "due");
   const ring = () => ({ paid: "var(--ok)", checking: "var(--warn)", late: "var(--late)", due: undefined, none: undefined })[status()];
 
+  const canRecord = () => isOrganizer(props.d) && !self() && props.d.committee.status === "active";
+  const recordHref = () => `/c/${props.d.committee.id}/pay/${props.m.member_id}`;
   return (
     <div class="flex items-center gap-3 rounded-[20px] p-3">
       <Avatar name={props.m.name} ring={props.m.paid_out ? "var(--turn)" : ring()} />
@@ -275,15 +281,53 @@ function MemberRow(props: { d: Dashboard; m: DashboardMember }) {
           <IconChat />{t("c.remind")}
         </a>
       </Show>
+      <Show when={canRecord()}>
+        <a href={recordHref()} aria-label={`${t("payOn.action")}: ${props.m.name}`}
+          onClick={e => { e.preventDefault(); tick(); navigate(recordHref()); }}
+          class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface-2 active:scale-95"><IconWallet /></a>
+      </Show>
     </div>
+  );
+}
+
+/** Things that need attention: toss due, a payout to confirm, JazzCash limits. */
+function Banners(props: { d: Dashboard }) {
+  const tossDue = () => props.d.rounds.find(r => r.status === null && r.toss_date <= props.d.today);
+  const toConfirm = () => props.d.rounds.find(r => r.status === "paid" && r.winner_member_id === props.d.me.member_id);
+  const m = () => props.d.month;
+  const near = (used: number, limit: number | null) => limit !== null && limit > 0 && used >= limit * 0.8;
+  const banner = (tone: string, text: string, to?: string) => (
+    <a href={to ?? "#"} onClick={e => { e.preventDefault(); if (to) { tick(); navigate(to); } }}
+      class={["flex items-center gap-3 rounded-[24px] p-4 active:scale-[0.99]", tone]}>
+      <span class="flex-1 text-[16px] font-semibold leading-snug">{text}</span>
+      <Show when={to}><span class="rtl:-scale-x-100"><IconChevron /></span></Show>
+    </a>
+  );
+  return (
+    <>
+      <Show when={isOrganizer(props.d) && tossDue()}>
+        {r => banner("bg-turn/20 text-ink", t("round.tossBanner", { n: r().round }), `/c/${props.d.committee.id}/round/${r().round}`)}
+      </Show>
+      <Show when={toConfirm()}>
+        {r => banner("bg-ok-soft text-ok", t("round.didReceive", { amount: money(props.d.committee.payout_paisa) }), `/c/${props.d.committee.id}/round/${r().round}`)}
+      </Show>
+      <Show when={isOrganizer(props.d) && near(m().expected_paisa, m().receive_limit_paisa)}>
+        {banner("bg-warn-soft text-warn", t("limit.receive", { amount: money(m().expected_paisa), limit: money(m().receive_limit_paisa ?? 0) }), `/c/${props.d.committee.id}/settings`)}
+      </Show>
+      <Show when={isOrganizer(props.d) && near(Math.max(m().sent_paisa, m().payouts_due_paisa), m().send_limit_paisa)}>
+        {banner("bg-warn-soft text-warn", t("limit.send", { amount: money(Math.max(m().sent_paisa, m().payouts_due_paisa)), limit: money(m().send_limit_paisa ?? 0) }), `/c/${props.d.committee.id}/settings`)}
+      </Show>
+    </>
   );
 }
 
 function RoundRow(props: { d: Dashboard; r: DashboardRound }) {
   const winner = () => props.d.members.find(m => m.member_id === props.r.winner_member_id)?.name;
   const current = () => props.r.round === props.d.current_round;
+  const href = () => `/c/${props.d.committee.id}/round/${props.r.round}`;
   return (
-    <div class={["flex items-center gap-3 rounded-[20px] p-3", { "bg-surface-2": current() }]}>
+    <a href={href()} onClick={e => { e.preventDefault(); tick(); navigate(href()); }}
+      class={["flex items-center gap-3 rounded-[20px] p-3 active:bg-surface-2", { "bg-surface-2": current() }]}>
       <span class={["num grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px] font-bold",
         props.r.winner_member_id ? "bg-turn text-[#0d1a16]" : current() ? "bg-cta text-cta-ink" : "bg-surface-2 text-ink-2"]}>{props.r.round}</span>
       <div class="min-w-0 flex-1">
@@ -296,7 +340,8 @@ function RoundRow(props: { d: Dashboard; r: DashboardRound }) {
         <Match when={props.r.status === "drawn"}><Badge tone="turn">{t("c.drawn")}</Badge></Match>
         <Match when={props.r.status === "disputed"}><Badge tone="late">{t("c.disputed")}</Badge></Match>
       </Switch>
-    </div>
+      <span class="text-ink-3 rtl:-scale-x-100"><IconChevron /></span>
+    </a>
   );
 }
 

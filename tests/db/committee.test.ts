@@ -162,6 +162,11 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect(payable[0]).toMatchObject({ due_date: "2026-11-01", amount_paisa: 20000, state: "due" });
     expect((await as("outsider", "select public.my_payable($1) p", [committeeId])).rows[0].p).toEqual([]);
 
+    // Organizers can see a member's payable days to record a payment for them; members can't see each other's.
+    expect((await rpc("org2", "member_payable", [members.m4])).length).toBe(15);
+    expect((await rpc("m4", "member_payable", [members.m4])).length).toBe(15);
+    await expect(rpc("m3", "member_payable", [members.m4])).rejects.toThrow(/organizers/);
+
     const q = (await as("owner", "select public.review_queue($1) q", [committeeId])).rows[0].q;
     expect(q).toHaveLength(1);
     expect(q[0]).toMatchObject({ id: m3Sub, member_name: "m3", amount_paisa: 40000, tid: "726755086850",
@@ -169,6 +174,15 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect((await as("m3", "select public.review_queue($1) q", [committeeId])).rows[0].q).toEqual([]); // not an organizer
     expect((await as("owner", "select public.committee_dashboard_v2($1) d", [committeeId])).rows[0].d.pending_reviews).toBe(1);
     expect((await as("m3", "select public.committee_dashboard_v2($1) d", [committeeId])).rows[0].d.pending_reviews).toBe(0);
+  });
+
+  it("tells organizers (not the payer) about a new payment to check", async () => {
+    const kinds = async (who: Who) => (await as(who, "select kind, payload from notifications where kind = 'payment.submitted'")).rows;
+    expect((await kinds("owner")).length).toBeGreaterThan(0);
+    expect((await kinds("owner"))[0].payload).toMatchObject({ amount_paisa: 40000, member_name: "m3" });
+    expect((await kinds("org2")).length).toBeGreaterThan(0);
+    expect(await kinds("m3")).toEqual([]);
+    expect(await kinds("m4")).toEqual([]);
   });
 
   it("only organizers verify, never their own payment", async () => {
@@ -255,6 +269,46 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     await expect(rpc(notWinner, "confirm_payout", [roundId, true, null])).rejects.toThrow(/recipient/);
     await rpc(winnerWho, "confirm_payout", [roundId, true, null]);
     expect((await as("m3", "select status from payout_rounds where id = $1", [roundId])).rows[0].status).toBe("confirmed");
+  });
+
+  it("shows this month's account figures for limit warnings", async () => {
+    await rpc("owner", "update_committee", [committeeId, "Pilot", "5 × Rs 200 daily", null, "2026-11-01",
+      "Committee Account", "03001234567", 30000000, 30000000]);
+    const d = (await as("m3", "select public.committee_dashboard_v2($1) d", [committeeId])).rows[0].d;
+    expect(d.month).toMatchObject({ receive_limit_paisa: 30000000, send_limit_paisa: 30000000,
+      expected_paisa: 3000000, payouts_due_paisa: 3000000 });
+    await expect(rpc("owner", "update_committee", [committeeId, "Pilot", null, null, "2026-12-01",
+      "Committee Account", "03001234567", null, null])).rejects.toThrow(/locked/);
+    await expect(rpc("m3", "update_committee", [committeeId, "Hacked", null, null, "2026-11-01",
+      "x", "03001234567", null, null])).rejects.toThrow(/organizers/);
+  });
+
+  it("gives members a readable activity feed", async () => {
+    const feed = (await as("m4", "select public.audit_feed($1, 500) f", [committeeId])).rows[0].f;
+    expect(feed[0].created_at >= feed[feed.length - 1].created_at).toBe(true);
+    expect(feed.find((e: any) => e.action === "committee.created")).toMatchObject({ actor_name: "owner" });
+    expect(feed.some((e: any) => e.action === "payment.rejected" && e.details.reason)).toBe(true);
+    expect((await as("outsider", "select public.audit_feed($1) f", [committeeId])).rows[0].f).toEqual([]);
+  });
+
+  it("lets members leave, organizers remove and re-schedule, only before the start", async () => {
+    const cid = await rpc("owner", "create_committee", ["Small", null, 3, 10000, "weekly", null, 2, "2026-12-07",
+      60000, "Acct", "03001234567", null, null, null, null]);
+    const code = await rpc("owner", "create_invitation", [cid, 24]);
+    await rpc("m3", "join_committee", [code]);
+    await rpc("m4", "join_committee", [code]);
+    const mem = async () => (await as("owner", "select id, user_id from committee_members where committee_id = $1", [cid])).rows;
+    await rpc("m4", "leave_committee", [cid]);
+    expect((await mem()).length).toBe(2);
+    await expect(rpc("owner", "leave_committee", [cid])).rejects.toThrow(/can't leave/);
+    const m3row = (await mem()).find(r => r.user_id === users.m3)!;
+    await expect(rpc("m3", "remove_member", [m3row.id])).rejects.toThrow(/organizers/);
+    await rpc("owner", "remove_member", [m3row.id]);
+    expect((await mem()).length).toBe(1);
+    await rpc("owner", "update_committee", [cid, "Small", null, null, "2026-12-14", "Acct", "03001234567", null, null]);
+    await expect(rpc("owner", "update_committee", [cid, "Small", null, null, "2026-01-01", "Acct", "03001234567", null, null])).rejects.toThrow(/past/);
+    expect(await rpc("owner", "revoke_invitations", [cid])).toBe(1);
+    await expect(rpc("m5", "join_committee", [code])).rejects.toThrow(/invalid or expired/);
   });
 
   it("keeps an audit trail members can read but not change", async () => {
