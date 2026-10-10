@@ -219,6 +219,15 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     await expect(as("outsider", "select public.committee_dashboard($1)", [committeeId])).rejects.toThrow(/Not a member/);
   });
 
+  it("gives each member a home summary of their own dues", async () => {
+    const [m5Home] = (await as("m5", "select public.my_home() h")).rows[0].h;
+    expect(m5Home).toMatchObject({ id: committeeId, status: "active", joined: 5, current_round: 1, toss_date: "2026-11-30",
+      today_state: "due", due_today_paisa: 20000, overdue_paisa: 580000 });
+    const [m3Home] = (await as("m3", "select public.my_home() h")).rows[0].h;
+    expect(m3Home).toMatchObject({ due_today_paisa: 0, overdue_paisa: 0, today_state: "verified" });
+    expect((await as("outsider", "select public.my_home() h")).rows[0].h).toEqual([]);
+  });
+
   it("lets the organizer pay out a short pot (settled within the family), logging the shortfall", async () => {
     await expect(rpc("owner", "record_payout", [roundId, 0, null, "2026-11-30T21:00:00+05:00", null])).rejects.toThrow(/amount/);
     await rpc("owner", "record_payout", [roundId, 2400000, "333333333", "2026-11-30T21:00:00+05:00", null]);

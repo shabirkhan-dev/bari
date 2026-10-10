@@ -1,49 +1,150 @@
 @import "tailwindcss";
 
-@theme {
+/*
+ * Bari design system
+ * Calm monochrome surfaces, deep ink, big tabular numbers.
+ * Emerald = brand moments. Gold = "whose turn" only. Status colors are small and functional.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --color-bari-ink: #0e2a23;
-  --color-bari-emerald: #0f5f4f;
-  --color-bari-emerald-dark: #0b4339;
-  --color-bari-gold: #e0a526;
-  --color-bari-ground: #f4f7f5;
-  --color-bari-muted: #3d5650;
-  --color-bari-line: #d3ddd9;
-  --color-bari-mint: #e3f1ec;
+  --font-num: "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-cta: var(--cta);
+  --color-cta-ink: var(--cta-ink);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-turn: var(--turn);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-late: var(--late);
+  --color-late-soft: var(--late-soft);
+  --color-dock: var(--dock);
+  --color-dock-ink: var(--dock-ink);
+
+  --radius-card: 28px;
+  --radius-tile: 20px;
 }
 
-/* ── Feel like an installed app, not a web page ── */
+:root {
+  --bg: #eef1ef;
+  --surface: #ffffff;
+  --surface-2: #f5f7f6;
+  --ink: #0d1a16;
+  --ink-2: #4d5f58;
+  --ink-3: #7d8c86;
+  --line: #e0e6e3;
+  --cta: #0d1a16;
+  --cta-ink: #ffffff;
+  --brand: #0f5f4f;
+  --brand-soft: #dcefe8;
+  --turn: #e0a526;
+  --ok: #157a52;
+  --ok-soft: #dff3e9;
+  --warn: #8a5a00;
+  --warn-soft: #fbefd2;
+  --late: #b4232a;
+  --late-soft: #fde4e3;
+  --dock: #0d1a16;
+  --dock-ink: #ffffff;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #090e0c;
+  --surface: #131a17;
+  --surface-2: #1b2420;
+  --ink: #eef4f1;
+  --ink-2: #a3b2ab;
+  --ink-3: #74837c;
+  --line: #24302b;
+  --cta: #eef4f1;
+  --cta-ink: #0d1a16;
+  --brand: #3fb08c;
+  --brand-soft: #173a30;
+  --turn: #f2b84b;
+  --ok: #4cc791;
+  --ok-soft: #133528;
+  --warn: #f2c14e;
+  --warn-soft: #3a2f12;
+  --late: #ff7b72;
+  --late-soft: #3d1a1a;
+  --dock: #eef4f1;
+  --dock-ink: #0d1a16;
+  color-scheme: dark;
+}
+
+/* ── Native feel ── */
 html {
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
-  background: #0b1f1a; /* outside the phone column on wide screens */
+  background: var(--bg);
 }
 body {
-  overscroll-behavior: none; /* no pull-to-refresh / rubber-band on the page */
-  touch-action: manipulation; /* no double-tap zoom delay */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
-button, a, [role="tab"] {
-  -webkit-touch-callout: none;
-  user-select: none;
-}
+button, a, [role="tab"] { -webkit-touch-callout: none; user-select: none; }
 input, textarea { user-select: text; }
-:focus-visible { outline: 3px solid color-mix(in oklab, var(--color-bari-gold) 70%, white); outline-offset: 2px; }
+:focus-visible { outline: 3px solid var(--turn); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
 /* Mobile-only: on wider screens the app stays a phone-width column. */
-#root { max-width: 480px; margin: 0 auto; min-height: 100dvh; background: var(--color-bari-ground); position: relative; }
+#root { max-width: 480px; margin: 0 auto; min-height: 100dvh; position: relative; background: var(--bg); }
 
-/* ── Screen-to-screen slide, like a native navigation stack ── */
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: 260ms; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
-html[data-nav="forward"]::view-transition-old(root) { animation-name: bari-out-left; }
-html[data-nav="forward"]::view-transition-new(root) { animation-name: bari-in-right; }
-html[data-nav="back"]::view-transition-old(root) { animation-name: bari-out-right; }
-html[data-nav="back"]::view-transition-new(root) { animation-name: bari-in-left; }
-::view-transition-group(tabbar) { animation: none; } /* tab bar stays put */
-@keyframes bari-in-right { from { transform: translateX(100%); } }
-@keyframes bari-out-left { to { transform: translateX(-28%); opacity: 0.6; } }
-@keyframes bari-in-left { from { transform: translateX(-28%); opacity: 0.6; } }
-@keyframes bari-out-right { to { transform: translateX(100%); } }
+/* ── Urdu: Nastaliq needs room to breathe ── */
+html[lang="ur"] body { font-family: "Noto Nastaliq Urdu", var(--font-sans); line-height: 2; }
+html[lang="ur"] .num, html[lang="ur"] input, html[lang="ur"] .latin { font-family: var(--font-num); line-height: 1.3; }
+html[lang="ur"] h1, html[lang="ur"] h2, html[lang="ur"] p, html[lang="ur"] span, html[lang="ur"] button, html[lang="ur"] a { letter-spacing: 0; }
 
-@keyframes bari-pulse { 50% { opacity: 0.45; } }
-.skeleton { background: var(--color-bari-line); border-radius: 12px; animation: bari-pulse 1.4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+/* ── Screen transitions (direction-aware, RTL flips) ── */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 280ms; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+html[data-nav="forward"]::view-transition-old(root) { animation-name: out-start; }
+html[data-nav="forward"]::view-transition-new(root) { animation-name: in-end; }
+html[data-nav="back"]::view-transition-old(root) { animation-name: out-end; }
+html[data-nav="back"]::view-transition-new(root) { animation-name: in-start; }
+html[dir="rtl"][data-nav="forward"]::view-transition-old(root) { animation-name: out-end-rtl; }
+html[dir="rtl"][data-nav="forward"]::view-transition-new(root) { animation-name: in-end-rtl; }
+html[dir="rtl"][data-nav="back"]::view-transition-old(root) { animation-name: out-start-rtl; }
+html[dir="rtl"][data-nav="back"]::view-transition-new(root) { animation-name: in-start-rtl; }
+::view-transition-group(dock) { animation: none; }
+@keyframes in-end { from { transform: translateX(100%); } }
+@keyframes out-start { to { transform: translateX(-25%); opacity: 0.5; } }
+@keyframes in-start { from { transform: translateX(-25%); opacity: 0.5; } }
+@keyframes out-end { to { transform: translateX(100%); } }
+@keyframes in-end-rtl { from { transform: translateX(-100%); } }
+@keyframes out-end-rtl { to { transform: translateX(25%); opacity: 0.5; } }
+@keyframes in-start-rtl { from { transform: translateX(25%); opacity: 0.5; } }
+@keyframes out-start-rtl { to { transform: translateX(-100%); } }
+
+/* Bottom sheet */
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@keyframes fade-in { from { opacity: 0; } }
+.sheet { animation: sheet-up 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.scrim { animation: fade-in 200ms ease-out; }
+
+/* Member ring: a newly joined seat settles in once */
+@keyframes seat-in { from { transform: scale(0.6); opacity: 0; } }
+.seat { animation: seat-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both; transform-box: fill-box; transform-origin: center; }
+
+@keyframes pulse { 50% { opacity: 0.45; } }
+.skeleton { background: var(--line); border-radius: 20px; animation: pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .scrim, .seat, .skeleton { animation: none; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}

@@ -128,3 +128,29 @@ export async function getDashboard(committeeId: string): Promise<Dashboard> {
   if (error) fail(error);
   return data as Dashboard;
 }
+
+export interface HomeItem {
+  id: string;
+  name: string;
+  status: CommitteeSummary["status"];
+  role: DashboardMember["role"];
+  member_count: number;
+  joined: number;
+  contribution_paisa: number;
+  frequency: Frequency;
+  interval_days: number | null;
+  start_date: string;
+  payout_paisa: number;
+  rounds_total: number;
+  current_round: number | null;
+  toss_date: string | null;
+  today_state: ObligationState | null;
+  due_today_paisa: number;
+  overdue_paisa: number;
+}
+
+export async function getHome(): Promise<HomeItem[]> {
+  const { data, error } = await supabase.rpc("my_home");
+  if (error) fail(error);
+  return (data ?? []) as HomeItem[];
+}
