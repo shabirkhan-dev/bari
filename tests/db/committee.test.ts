@@ -4,7 +4,7 @@
  * Requires TEST_DATABASE_URL pointing at a superuser connection to an empty server.
  * Skipped when it isn't set.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -51,7 +51,10 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     db = new pg.Client({ connectionString: url!.replace(/\/[^/?]*(\?|$)/, `/${dbName}$1`) });
     await db.connect();
     await db.query(readFileSync("tests/db/supabase-stub.sql", "utf8"));
-    await db.query(readFileSync("supabase/migrations/20261010000001_core.sql", "utf8"));
+    // Every migration except storage (needs Supabase's storage schema).
+    for (const f of readdirSync("supabase/migrations").filter(f => f.endsWith(".sql") && !f.includes("storage")).sort()) {
+      await db.query(readFileSync(`supabase/migrations/${f}`, "utf8"));
+    }
     for (const [name, id] of Object.entries(users)) {
       await db.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2)", [id, { display_name: name }]);
     }
@@ -61,6 +64,17 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     await db?.end();
     await admin?.query(`drop database if exists ${dbName}`);
     await admin?.end();
+  });
+
+  it("takes the name from Google and only accepts Pakistani mobile numbers", async () => {
+    const g = randomUUID();
+    await db.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2)", [g, { full_name: "Ayesha Khan", email: "a@x.pk" }]);
+    expect((await db.query("select display_name from profiles where id = $1", [g])).rows[0].display_name).toBe("Ayesha Khan");
+    await expect(as("owner", "update profiles set phone = '0511234567' where id = auth.uid()")).rejects.toThrow(/profiles_phone_check/);
+    await as("owner", "update profiles set phone = '03001234567' where id = auth.uid()");
+    // Someone else's profile is untouchable.
+    const r = await as("m3", "update profiles set display_name = 'hacked' where id = $1", [users.owner]);
+    expect(r.rowCount).toBe(0);
   });
 
   it("rejects an inconsistent committee at the database level", async () => {

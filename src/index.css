@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --color-bari-ink: #0e2a23;
+  --color-bari-emerald: #0f5f4f;
+  --color-bari-gold: #e0a526;
+  --color-bari-ground: #f4f7f5;
+  --color-bari-muted: #3d5650;
+  --color-bari-line: #d3ddd9;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}

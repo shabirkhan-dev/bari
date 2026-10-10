@@ -171,3 +171,17 @@ describe("receipt parser", () => {
     expect(parseJazzCashReceipt("blurry")).toEqual({ kind: "unknown", saysSuccessful: false });
   });
 });
+
+import { formatPkMobile, normalizePkMobile } from "../src/domain/phone";
+
+describe("phone", () => {
+  it("accepts the ways people type Pakistani numbers", () => {
+    for (const v of ["03001234567", "0300 1234567", "0300-1234567", "+92 300 1234567", "923001234567", "00923001234567"]) {
+      expect(normalizePkMobile(v)).toBe("03001234567");
+    }
+  });
+  it("rejects landlines and short numbers", () => {
+    for (const v of ["0511234567", "0300123456", "abc", "", "+1 415 555 0100"]) expect(normalizePkMobile(v)).toBeUndefined();
+  });
+  it("formats for display", () => expect(formatPkMobile("03001234567")).toBe("0300 1234567"));
+});
