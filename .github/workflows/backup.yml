@@ -1,0 +1,54 @@
+name: Nightly database backup
+
+on:
+  schedule:
+    - cron: "17 21 * * *" # 02:17 Pakistan time
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      # Throwaway server to prove each backup actually restores.
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: restore
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # pg_dump must be at least as new as the Supabase server; 18 covers 15–18.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      - name: Back up
+        id: backup
+        env:
+          # Use the Session pooler string (IPv4). The direct connection is IPv6-only on the free plan.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: echo "file=$(scripts/backup.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Prove it restores
+        env:
+          RESTORE_ADMIN_URL: postgresql://postgres:restore@localhost:5432/postgres
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: scripts/restore-check.sh "${{ steps.backup.outputs.file }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ steps.backup.outputs.file }}
+          retention-days: 90
+          if-no-files-found: error

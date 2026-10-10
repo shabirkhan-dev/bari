@@ -39,6 +39,28 @@ npm run dev
 
 Database: apply `supabase/migrations/*` with the Supabase CLI (`supabase db push`) or paste them into the SQL editor in order.
 
+## Supabase setup (free plan)
+
+1. Create a project at supabase.com. Pick the **Singapore or Mumbai** region (closest to Pakistan).
+2. Apply `supabase/migrations/*` in order (SQL editor or `supabase db push`).
+3. Put the **Project URL** and **anon key** in `.env`. Never put the service-role key in the app.
+4. The free plan pauses a project after a week with no activity, so daily payments keep it awake. It has **no automatic backups**, which is why the nightly backup below exists.
+
+## Nightly backup
+
+`.github/workflows/backup.yml` runs at 02:17 PKT. It dumps the database, **encrypts** the dump (AES-256), restores it into a throwaway Postgres to prove it works, and keeps it as a 90-day GitHub artifact.
+
+Repo secrets to add (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_DB_URL` | Supabase → Connect → **Session pooler** connection string (IPv4; GitHub runners can't use the IPv6 direct one) |
+| `BACKUP_PASSPHRASE` | A long random passphrase. **Store it somewhere safe; without it the backups can't be opened.** |
+
+Restore manually: `RESTORE_ADMIN_URL=… BACKUP_PASSPHRASE=… scripts/restore-check.sh file.gpg` (restores into a temporary database and checks row counts).
+
+Receipt images live in Supabase Storage and are **not** in this backup yet (see limitations).
+
 ## Environment variables
 
 | Name | Purpose |
@@ -59,7 +81,8 @@ The DB suite creates a temporary database, runs the real migration against a sma
 ## Status
 
 - [x] Milestone 1: schema, RLS, transactional RPCs, domain logic, 31 tests
-- [ ] Milestone 2: Supabase project + auth wiring
+- [x] Nightly encrypted backup with automatic restore check (tested locally; runs in CI once secrets are set)
+- [ ] Milestone 2: Supabase project + auth wiring (client ready; waiting on project keys)
 - [ ] Milestone 3: screens (dashboard, submit receipt, verification queue, ledger, toss, payouts)
 - [ ] Milestone 4: PWA share target for JazzCash receipt images, in-browser OCR (Tesseract)
 - [ ] Milestone 5: reconciliation report, backups, pilot
@@ -68,6 +91,7 @@ The DB suite creates a temporary database, runs the real migration against a sma
 
 - **Short pot after a toss.** A member left out of the toss still owes the round. The payout stays blocked until their share is verified (or someone pays for them). Confirm this is what the committee wants.
 - **Member who already won and then stops paying**: no rule implemented yet.
+- **Receipt images aren't backed up yet**; only the database is. Their SHA-256 hashes are, so tampering is detectable. A weekly copy to Cloudflare R2 is planned.
 - **Storage policies** (`…_storage.sql`) use Supabase's `storage` schema and aren't covered by the local DB tests.
 - **Share target** works only when the PWA is installed through Chrome on Android. iPhone users upload a screenshot instead.
 - The sample receipt was a **1Bill payment**. A real committee transfer receipt still needs testing against the parser.

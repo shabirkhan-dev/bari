@@ -3,7 +3,10 @@
 -- Money is integer paisa (bigint). Committee dates are PKT calendar dates.
 -- All writes go through SECURITY DEFINER functions below; tables expose SELECT only (RLS).
 
-create extension if not exists pgcrypto;
+-- Supabase keeps extensions in the "extensions" schema; calls below are schema-qualified
+-- because SECURITY DEFINER functions pin search_path to public.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ───────────────────────── helpers ─────────────────────────
 
@@ -350,7 +353,7 @@ begin
   end if;
   -- 8 chars from an unambiguous alphabet (no 0/O/1/I): easy to read out over the phone.
   select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 1 + (get_byte(b, i) % 32), 1), '')
-    into code from (select gen_random_bytes(8) b) x, generate_series(0, 7) i;
+    into code from (select extensions.gen_random_bytes(8) b) x, generate_series(0, 7) i;
   insert into committee_invitations (committee_id, code, created_by, expires_at)
   values (p_committee_id, code, auth.uid(), now() + make_interval(hours => least(greatest(p_valid_hours, 1), 720)));
   perform _audit(p_committee_id, 'invitation.created', 'committee', p_committee_id);
@@ -605,7 +608,7 @@ begin
 
   if p_method = 'app' then
     rnd := (get_byte(b, 0)::bigint << 24) | (get_byte(b, 1) << 16) | (get_byte(b, 2) << 8) | get_byte(b, 3)
-           from (select gen_random_bytes(4) b) x;
+           from (select extensions.gen_random_bytes(4) b) x;
     winner := elig[1 + (rnd % cardinality(elig))::int]; -- mirrors pickWinner() in src/domain/toss.ts
   elsif p_method = 'manual' then
     if p_manual_winner is null or not (p_manual_winner = any(elig)) then
