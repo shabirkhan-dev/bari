@@ -1,18 +1,19 @@
 import { freshness } from "../lib/live";
-import { createMemo, createSignal, Errored, For, Loading, Match, refresh, Show, Switch } from "solid-js";
+import { createMemo, Errored, For, Loading, Match, refresh, Show, Switch } from "solid-js";
 import {
-  activateCommittee, createInvitation, getDashboard, latestInvitation,
+  getDashboard,
   type Dashboard, type DashboardMember, type DashboardRound
 } from "../lib/api";
 import { describeError } from "../lib/errors";
-import { contributionLabel, daysBetween, whatsappLink } from "../domain/display";
+import { InviteG } from "./g/InviteG";
+import { daysBetween, whatsappLink } from "../domain/display";
 import { formatPkMobile } from "../domain/phone";
 import { dateDay, dateLong, dateShort, money, t } from "../i18n";
 import {
-  Avatar, Badge, Button, Card, ErrorNote, Money, Pill, Screen, Sheet, Skeleton, tick, useCopy
+  Avatar, Badge, Button, Card, ErrorNote, Money, Pill, Screen, Skeleton, tick, useCopy
 } from "../ui/kit";
 import { MemberRing, type Seat, type SeatStatus } from "../ui/MemberRing";
-import { IconChat, IconCheck, IconChevron, IconClock, IconCopy, IconGear, IconPlus, IconWallet } from "../ui/icons";
+import { IconChat, IconCheck, IconChevron, IconClock, IconCopy, IconGear, IconWallet } from "../ui/icons";
 import { navigate } from "../lib/router";
 
 export function Committee(props: { id: string }) {
@@ -22,7 +23,7 @@ export function Committee(props: { id: string }) {
       <Loading fallback={<Screen backTo="/"><Skeleton lines={4} /></Screen>}>
         <Switch>
           <Match when={dash().committee.status === "forming"}>
-            <Forming d={dash()} onChange={() => refresh(dash)} />
+            <InviteG d={dash()} onChange={() => refresh(dash)} />
           </Match>
           <Match when={dash().committee.status !== "forming"}>
             <Running d={dash()} />
@@ -44,118 +45,6 @@ function seatStatus(m: DashboardMember): SeatStatus {
 }
 
 /* ───────────── Before the start ───────────── */
-
-function Forming(props: { d: Dashboard; onChange: () => void }) {
-  const joined = () => props.d.members.length;
-  const total = () => props.d.committee.member_count;
-  const full = () => joined() >= total();
-  const [confirm, setConfirm] = createSignal(false);
-  const [busy, setBusy] = createSignal(false);
-  const [error, setError] = createSignal("");
-  const invite = createMemo(() => (isOrganizer(props.d) ? latestInvitation(props.d.committee.id) : Promise.resolve(null)));
-  const [made, setMade] = createSignal<string | null>(null);
-  const code = () => made() ?? invite()?.code ?? null;
-  const message = () => t("c.inviteMsg", { name: props.d.committee.name, code: code() ?? "", link: `${location.origin}/join/${code()}` });
-  const { copied, copy } = useCopy();
-
-  const ensureCode = async () => {
-    if (code()) return code()!;
-    const c = await createInvitation(props.d.committee.id);
-    setMade(c);
-    return c;
-  };
-  const share = async () => {
-    try {
-      await ensureCode();
-      if (navigator.share) await navigator.share({ title: "Bari", text: message() });
-      else await copy(message());
-    } catch (e) {
-      if ((e as DOMException)?.name !== "AbortError") setError(describeError(e));
-    }
-  };
-  const start = async () => {
-    setBusy(true);
-    setError("");
-    try { await activateCommittee(props.d.committee.id); setConfirm(false); props.onChange(); }
-    catch (e) { setError(describeError(e)); setBusy(false); setConfirm(false); }
-  };
-
-  const seats = (): Seat[] => props.d.members.map(m => ({ name: m.name, status: "none", self: m.member_id === props.d.me.member_id }));
-
-  return (
-    <Screen backTo="/" action={<button type="button" aria-label={t("c.settings")} onClick={() => { tick(); navigate(`/c/${props.d.committee.id}/settings`); }}
-      class="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink active:scale-95"><IconGear /></button>} bottom={
-      <Show when={isOrganizer(props.d)} fallback={<p class="pb-2 text-center text-[15px] text-ink-2">{t("c.organizerWillStart")}</p>}>
-        <Show when={full()} fallback={<Button class="w-full" onClick={share} trailing={<IconPlus size={14} />}>{t("c.shareInvite")}</Button>}>
-          <Button class="w-full" onClick={() => setConfirm(true)}>{t("c.start")}</Button>
-        </Show>
-      </Show>
-    }>
-      <section class="flex flex-col items-center gap-5 pb-2 text-center">
-        <MemberRing total={total()} seats={seats()} size={264} label={t("c.ringLabel", { total: total(), joined: joined() })}>
-          <span class="num text-[44px] font-bold leading-none">{joined()}<span class="text-ink-3">/{total()}</span></span>
-        </MemberRing>
-        <div>
-          <h1 class="text-[30px] font-bold leading-tight">{props.d.committee.name}</h1>
-          <p class="mx-auto mt-2 max-w-[20rem] text-[16px] text-ink-2">{full() ? t("c.organizerWillStart") : t("c.waitingSub")}</p>
-        </div>
-        <div class="flex flex-wrap justify-center gap-2">
-          <Pill>{contributionLabel(props.d.committee.contribution_paisa, props.d.committee.frequency, props.d.committee.interval_days)}</Pill>
-          <Pill>{t("status.starts", { date: dateShort(props.d.committee.start_date) })}</Pill>
-        </div>
-      </section>
-
-      <Show when={isOrganizer(props.d) && !full()}>
-        <Card class="flex flex-col gap-4">
-          <p class="text-[15px] font-medium text-ink-2">{t("c.inviteCode")}</p>
-          <Loading fallback={<div class="skeleton h-16" />}>
-            <Show when={code()} fallback={<Button variant="soft" onClick={() => ensureCode().catch(e => setError(describeError(e)))}>{t("c.createInvite")}</Button>}>
-              <p class="latin text-center text-[34px] font-bold tracking-[0.3em]" dir="ltr" aria-label={code()!.split("").join(" ")}>{code()}</p>
-              <div class="grid grid-cols-2 gap-3">
-                <Button variant="soft" onClick={() => copy(message())}><IconCopy />{copied() ? t("common.copied") : t("common.copy")}</Button>
-                <a href={`https://wa.me/?text=${encodeURIComponent(message())}`} target="_blank" rel="noopener" onClick={() => tick()}
-                  class="flex h-14 items-center justify-center gap-2 rounded-full bg-surface-2 text-[17px] font-semibold active:scale-[0.98]">
-                  <IconChat />{t("common.whatsapp")}
-                </a>
-              </div>
-              <p class="text-center text-sm text-ink-3">{t("c.valid")}</p>
-            </Show>
-          </Loading>
-        </Card>
-      </Show>
-
-      <Card class="p-2">
-        <h2 class="px-3 pb-1 pt-3 text-lg font-semibold">{t("c.members")}</h2>
-        <ul>
-          <For each={props.d.members}>{m => (
-            <li class="flex items-center gap-3 rounded-[20px] p-3">
-              <Avatar name={m.name} />
-              <span class="min-w-0 flex-1 truncate text-[17px] font-medium">
-                {m.name}<Show when={m.member_id === props.d.me.member_id}><span class="text-ink-3"> ({t("common.you")})</span></Show>
-              </span>
-              <Show when={m.role !== "member"}><Badge tone="neutral">{m.role === "owner" ? t("c.organizer") : t("c.coOrganizer")}</Badge></Show>
-            </li>
-          )}</For>
-        </ul>
-      </Card>
-
-      <Show when={error()}><ErrorNote message={error()} /></Show>
-
-      <Sheet open={confirm()} onClose={() => setConfirm(false)} label={t("c.startNow")}>
-        <div class="flex flex-col gap-5 px-2">
-          <div>
-            <h2 class="text-2xl font-bold">{t("c.startNow")}</h2>
-            <p class="mt-2 text-[16px] text-ink-2">{t("c.startWarn", { date: dateLong(props.d.committee.start_date) })}</p>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <Button variant="soft" onClick={() => setConfirm(false)}>{t("c.notYet")}</Button>
-            <Button disabled={busy()} onClick={start}>{busy() ? t("c.starting") : t("c.yesStart")}</Button>
-          </div>
-        </div>
-      </Sheet>
-    </Screen>
-  );
-}
 
 /* ───────────── Running ───────────── */
 

@@ -98,9 +98,9 @@ function hm(h: number, m: string, dropZero = false): string {
 }
 
 /** "21:00" → "9 pm" / "رات 9" */
-export function timeOfDay(hhmm: string): string {
+export function timeOfDay(hhmm: string, keepMinutes = false): string {
   const [h = "0", m = "00"] = hhmm.split(":");
-  return hm(Number(h), m.padStart(2, "0"), true);
+  return hm(Number(h), m.padStart(2, "0"), !keepMinutes);
 }
 
 /** Pakistan calendar date of an ISO timestamp. */

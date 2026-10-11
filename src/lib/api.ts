@@ -415,3 +415,110 @@ export async function setDailyCutoff(committeeId: string, hhmm: string) {
   const { error } = await supabase.rpc("set_daily_cutoff", { p_committee_id: committeeId, p_cutoff: hhmm });
   if (error) fail(error);
 }
+
+/* ───────────── Second design set: fines, join preview, members, receipts, push ───────────── */
+
+export interface Fine { obligation_id: string; round: number; due_date: string; fine_paisa: number; settled: "paid" | "waived" | null }
+export interface LedgerV2 extends Ledger { streak: number; late_fine_paisa: number | null; fines: Fine[] }
+
+export async function myLedgerV2(committeeId: string): Promise<LedgerV2> {
+  const { data, error } = await supabase.rpc("my_ledger_v2", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return data as LedgerV2;
+}
+
+export interface DashboardV4 extends Dashboard { late_fine_paisa: number | null; fines: Record<string, number> }
+
+export async function getDashboardV4(committeeId: string): Promise<DashboardV4> {
+  const { data, error } = await supabase.rpc("committee_dashboard_v4", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return data as DashboardV4;
+}
+
+export async function setLateFine(committeeId: string, paisa: number | null) {
+  const { error } = await supabase.rpc("set_late_fine", { p_committee_id: committeeId, p_fine_paisa: paisa });
+  if (error) fail(error);
+}
+
+export async function settleFine(obligationId: string, status: "paid" | "waived") {
+  const { error } = await supabase.rpc("settle_fine", { p_obligation_id: obligationId, p_status: status });
+  if (error) fail(error);
+}
+
+export interface InvitePreview {
+  committee_id: string; name: string; status: CommitteeSummary["status"]; organizer: string | null;
+  contribution_paisa: number; frequency: Frequency; interval_days: number | null; periods_per_round: number;
+  member_count: number; payout_paisa: number; start_date: string; cutoff: string; late_fine_paisa: number | null;
+  already_member: boolean; members: { name: string; user_id: string }[];
+}
+
+export async function invitationPreview(code: string): Promise<InvitePreview> {
+  const { data, error } = await supabase.rpc("invitation_preview", { p_code: code });
+  if (error) fail(error);
+  return data as InvitePreview;
+}
+
+export interface MembersRound {
+  today: string; round: number;
+  members: { member_id: string; days: { d: string; s: ObligationState }[]; won_round: number | null; streak: number }[];
+}
+
+export async function membersRound(committeeId: string): Promise<MembersRound> {
+  const { data, error } = await supabase.rpc("members_round", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return data as MembersRound;
+}
+
+export interface DecidedItem {
+  id: string; status: "verified" | "rejected"; member_id: string; member_name: string; amount_paisa: number;
+  tid: string | null; created_at: string; decided_at: string; decided_by_name: string | null;
+  decision_reason: string | null; periods: PeriodRef[] | null;
+}
+
+export async function reviewHistory(committeeId: string): Promise<DecidedItem[]> {
+  const { data, error } = await supabase.rpc("review_history", { p_committee_id: committeeId, p_limit: 100 });
+  if (error) fail(error);
+  return (data ?? []) as DecidedItem[];
+}
+
+export interface MySettings { reminder_on: boolean; reminder_time: string; lang: "en" | "ur"; push_devices: number }
+
+export async function mySettings(): Promise<MySettings> {
+  const { data, error } = await supabase.rpc("my_settings");
+  if (error) fail(error);
+  return data as MySettings;
+}
+
+export async function setReminder(on: boolean | null, time: string | null, lang: "en" | "ur" | null) {
+  const { error } = await supabase.rpc("set_reminder", { p_on: on, p_time: time, p_lang: lang });
+  if (error) fail(error);
+}
+
+export async function savePushSubscription(s: { endpoint: string; p256dh: string; auth: string }) {
+  const { error } = await supabase.rpc("save_push_subscription", { p_endpoint: s.endpoint, p_p256dh: s.p256dh, p_auth: s.auth });
+  if (error) fail(error);
+}
+
+export async function removePushSubscription(endpoint: string) {
+  const { error } = await supabase.rpc("remove_push_subscription", { p_endpoint: endpoint });
+  if (error) fail(error);
+}
+
+/** Payout proof goes into the private bucket under payouts/<committee>/<round>/. */
+export async function uploadPayoutProof(committeeId: string, roundId: string, r: { blob: Blob; mime: string; ext: string; sha256: string }): Promise<string> {
+  const path = `payouts/${committeeId}/${roundId}/${r.sha256}.${r.ext}`;
+  const up = await supabase.storage.from("receipts").upload(path, r.blob, { contentType: r.mime, upsert: false });
+  if (up.error && !/exists/i.test(up.error.message)) fail(up.error);
+  return path;
+}
+
+export async function recordPayoutWithProof(roundId: string, amountPaisa: number, tid: string | null, paidAt: string, evidencePath: string | null) {
+  const { error } = await supabase.rpc("record_payout", { p_payout_round_id: roundId, p_amount_paisa: amountPaisa, p_tid: tid, p_paid_at: paidAt, p_evidence_path: evidencePath });
+  if (error) fail(error);
+}
+
+export async function memberFines(memberId: string): Promise<{ obligation_id: string; due_date: string; round: number; fine_paisa: number }[]> {
+  const { data, error } = await supabase.rpc("member_fines", { p_member_id: memberId });
+  if (error) fail(error);
+  return (data ?? []) as { obligation_id: string; due_date: string; round: number; fine_paisa: number }[];
+}

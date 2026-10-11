@@ -354,6 +354,10 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect(hist.map((h: any) => h.status)).toEqual(expect.arrayContaining(["verified", "rejected"]));
     expect(hist[0].decided_by_name).toBeTruthy();
     expect(await rpc("m3", "review_history", [committeeId, 50])).toEqual([]); // organizers only
+    const n = (await as("m3", "select payload from notifications where user_id = auth.uid() and kind = 'payment.verified' limit 1")).rows[0].payload;
+    expect(n.by_name).toBeTruthy();
+    expect(n.periods.length).toBeGreaterThan(0);
+    expect(typeof n.streak).toBe("number");
   });
 
   describe("late fines, invite preview and push jobs", () => {
@@ -397,7 +401,10 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
       const mid = (await as("m3", "select id from committee_members where committee_id = $1 and user_id = auth.uid()", [fc])).rows[0].id;
       expect((await rpc("owner", "committee_dashboard_v4", [fc])).fines[mid]).toBe(20000);
       await expect(rpc("m3", "settle_fine", [l.fines[0].obligation_id, "waived"])).rejects.toThrow(/organizers/);
+      expect(await rpc("owner", "member_fines", [mid])).toHaveLength(4);
+      await expect(rpc("outsider", "member_fines", [mid])).rejects.toThrow(/not found/);
       await rpc("owner", "settle_fine", [l.fines[0].obligation_id, "waived"]);
+      expect(await rpc("m3", "member_fines", [mid])).toHaveLength(3);
       expect((await rpc("owner", "committee_dashboard_v4", [fc])).fines[mid]).toBe(15000);
       const own = (await rpc("owner", "my_ledger_v2", [fc])).fines[0].obligation_id;
       await expect(rpc("owner", "settle_fine", [own, "paid"])).rejects.toThrow(/Someone else/);

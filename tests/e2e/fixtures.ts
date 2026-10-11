@@ -68,6 +68,13 @@ export function makeState() {
       { member_id: "m4", eligible: true, reason: null, arrears_paisa: 0 }
     ],
     payoutRound: null as Record<string, unknown> | null,
+    history: [
+      { id: "h9", status: "verified", member_id: "m1", member_name: "Ayesha Bibi", amount_paisa: 20000, tid: "726755086851",
+        created_at: new Date().toISOString(), decided_at: new Date().toISOString(), decided_by_name: "Shabir Khan", decision_reason: null, periods: [{ round: 1, n: 10 }] }
+    ],
+    invite: { committee_id: "c2", name: "Office friends", status: "forming", organizer: "Shabir Khan", contribution_paisa: 20000, frequency: "daily",
+      interval_days: null, periods_per_round: 30, member_count: 5, payout_paisa: 3000000, start_date: addDays(TODAY, 20), cutoff: "21:00",
+      late_fine_paisa: 5000, already_member: false, members: [{ name: "Shabir Khan", user_id: UID }, { name: "Bilal Ahmed", user_id: "u7" }, { name: "Hira Malik", user_id: "u8" }] },
     notifications: [
       { id: "n1", kind: "payment.submitted", payload: { amount_paisa: 20000, member_name: "Sumera Khan" }, read_at: null as string | null, created_at: new Date().toISOString(), committee_id: "c1", committees: { name: "Family committee" } },
       { id: "n2", kind: "payment.rejected", payload: { reason: "Not in the account history" }, read_at: null as string | null, created_at: new Date().toISOString(), committee_id: "c1", committees: { name: "Family committee" } }
@@ -79,6 +86,28 @@ export function makeState() {
   };
 }
 export type State = ReturnType<typeof makeState>;
+
+/** The second committee, still forming: you (organizer) and two others joined, 5 seats. */
+function forming(state: State) {
+  const d = state.dashboard;
+  return {
+    ...d, current_round: null, rounds: [], pending_reviews: 0,
+    committee: { ...d.committee, id: "c2", name: "Office friends", status: "forming", start_date: addDays(TODAY, 20) },
+    members: [
+      { ...d.members[0]!, today_state: null, overdue_paisa: 0, overdue_count: 0 },
+      { ...d.members[0]!, member_id: "f1", user_id: "u7", name: "Bilal Ahmed", role: "member", today_state: null, overdue_paisa: 0, overdue_count: 0 },
+      { ...d.members[0]!, member_id: "f2", user_id: "u8", name: "Hira Malik", role: "member", today_state: null, overdue_paisa: 0, overdue_count: 0 }
+    ]
+  };
+}
+
+/** See the app as an ordinary member instead of the organizer. */
+export function asMember(state: State) {
+  state.home[0]!.role = "member";
+  state.dashboard.me.role = "member";
+  state.queue.forEach(q => (q.can_decide = false));
+  return state;
+}
 export interface Call { method: string; path: string; body: any }
 
 const json = (route: Route, body: unknown, status = 200) =>
@@ -113,13 +142,31 @@ export async function setup(page: Page, opts: { state?: State; lang?: "en" | "ur
         if (req.method() === "PATCH") { state.notifications.forEach(n => (n.read_at = new Date().toISOString())); return route.fulfill({ status: 204, body: "" }); }
         return json(route, state.notifications);
       case "/rest/v1/payout_rounds": return json(route, wantsObject ? state.payoutRound : state.payoutRound ? [state.payoutRound] : []);
-      case "/rest/v1/committee_invitations": return json(route, wantsObject ? { code: "K7QM2XWP", expires_at: addDays(TODAY, 7) } : []);
+      case "/rest/v1/committee_invitations": return json(route, wantsObject ? { code: "K7QM2XWP", expires_at: addDays(TODAY, 7) } : [{ code: "K7QM2XWP", expires_at: addDays(TODAY, 7) }]);
     }
     if (url.pathname.startsWith("/rest/v1/rpc/")) {
       switch (rpc) {
         case "my_home": return json(route, state.home);
-        case "committee_dashboard_v2": case "committee_dashboard_v3": return json(route, state.dashboard);
+        case "committee_dashboard_v2": case "committee_dashboard_v3":
+          return json(route, body?.p_committee_id === "c2" ? forming(state) : state.dashboard);
         case "my_ledger": return json(route, state.ledger);
+        case "my_ledger_v2": return json(route, { ...state.ledger, streak: 6, late_fine_paisa: null, fines: [] });
+        case "committee_dashboard_v4":
+          return json(route, { ...(body?.p_committee_id === "c2" ? forming(state) : state.dashboard), late_fine_paisa: null, fines: {} });
+        case "members_round": return json(route, {
+          today: TODAY, round: 1,
+          members: state.dashboard.members.map((m, i) => ({
+            member_id: m.member_id, won_round: null, streak: 0,
+            days: state.ledger.days.map((d, k) => ({ d: d.due_date, s: k < 7 ? "verified" : i === 1 && k <= 9 ? "verified" : i === 3 && k === 9 ? "submitted" : "due" }))
+          }))
+        });
+        case "review_history": return json(route, state.history);
+        case "invitation_preview":
+          if (body.p_code !== "K7QM2XWP") return json(route, { message: "Invitation code is invalid or expired" }, 400);
+          return json(route, state.invite);
+        case "join_committee": return json(route, "c2");
+        case "my_settings": return json(route, { reminder_on: false, reminder_time: "20:00", lang: "en", push_devices: 0 });
+        case "member_fines": return json(route, []);
         case "my_payable": case "member_payable": return json(route, state.payable);
         case "review_queue": return json(route, state.queue);
         case "toss_eligibility": return json(route, state.eligibility);

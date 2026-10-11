@@ -38,3 +38,26 @@ self.addEventListener("fetch", event => {
     return Response.redirect("/share", 303);
   })());
 });
+
+/* ── Push notifications (daily reminder, payment checked, toss, …) ── */
+self.addEventListener("push", event => {
+  let msg: { title?: string; body?: string; url?: string; tag?: string } = {};
+  try { msg = event.data?.json() ?? {}; } catch { msg = { title: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(msg.title || "Bari", {
+    body: msg.body ?? "",
+    tag: msg.tag,
+    icon: "/icon-192.png",
+    data: { url: msg.url ?? "/" }
+  }));
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const url = new URL((event.notification.data as { url?: string } | null)?.url ?? "/", self.location.origin).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const open = wins.find(w => new URL(w.url).origin === self.location.origin);
+    if (open) { await open.focus(); await open.navigate(url).catch(() => undefined); return; }
+    await self.clients.openWindow(url);
+  })());
+});

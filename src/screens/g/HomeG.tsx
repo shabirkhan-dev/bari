@@ -135,8 +135,8 @@ function MembersCard(props: { d: Dashboard }) {
   const dot = (s: string | null): "paid" | "due" | null => (s === "verified" ? "paid" : s ? "due" : null);
   const name = (m: Dashboard["members"][number]) => (m.member_id === props.d.me.member_id ? t("g.you") : firstName(m.name));
   return (
-    <a href={`/c/${props.d.committee.id}`} class="g-card flex h-[170px] flex-col px-3 pt-3.5"
-      onClick={e => { e.preventDefault(); tick(); navigate(`/c/${props.d.committee.id}`); }}>
+    <a href="/members" class="g-card flex h-[170px] flex-col px-3 pt-3.5"
+      onClick={e => { e.preventDefault(); tick(); navigate("/members", { replace: true, direction: "none" }); }}>
       <h2 class="g-serif px-1 text-[16px]">{t("g.h.members")}</h2>
       <ul class="mt-2.5 grid grid-cols-3 gap-x-1 gap-y-1.5">
         <For each={shown()}>{m => (
@@ -162,7 +162,7 @@ function MembersCard(props: { d: Dashboard }) {
 
 /* ───────────── Today's payment ───────────── */
 
-function PayCard(props: { d: Dashboard; l: Ledger }) {
+export function PayCard(props: { d: Dashboard; l: Ledger }) {
   const c = () => props.d.committee;
   const me = () => props.d.members.find(m => m.member_id === props.d.me.member_id);
   const today = () => props.l.today;
@@ -233,7 +233,7 @@ function TickStrip(props: { l: Ledger; label: string }) {
 
 /* ───────────── Next toss ───────────── */
 
-function NextToss(props: { d: Dashboard }) {
+export function NextToss(props: { d: Dashboard }) {
   const next = () => props.d.rounds.find(r => r.status === null);
   const left = () => props.d.members.filter(m => !m.paid_out).length;
   return (
@@ -261,7 +261,7 @@ function NextToss(props: { d: Dashboard }) {
 
 /* ───────────── Committee switcher ───────────── */
 
-function SwitchSheet(props: { open: boolean; onClose: () => void; items: HomeItem[]; currentId: string }) {
+export function SwitchSheet(props: { open: boolean; onClose: () => void; items: HomeItem[]; currentId: string }) {
   const go = (to: string) => { props.onClose(); navigate(to); };
   const row = "flex w-full items-center gap-3 rounded-[20px] p-2.5 text-start active:opacity-70";
   return (

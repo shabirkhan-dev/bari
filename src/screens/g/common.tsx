@@ -1,4 +1,4 @@
-import { createMemo, Errored, Loading, Show } from "solid-js";
+import { createMemo, createRenderEffect, Errored, Loading, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { getHome, type HomeItem, type PeriodRef } from "../../lib/api";
 import { current, pickCommittee } from "../../lib/current";
@@ -7,7 +7,7 @@ import { freshness } from "../../lib/live";
 import { lang, t } from "../../i18n";
 import type { Key } from "../../i18n/strings";
 import type { Frequency } from "../../domain/schedule";
-import { GNote, GScreen, GSkeleton } from "../../ui/glass";
+import { GNote, GScreen, GSkeleton, setNavRole } from "../../ui/glass";
 
 /**
  * Tabs (Home, Ledger, Toss) show one running committee: the one picked in the
@@ -19,7 +19,10 @@ export function WithCommittee(props: {
   children: (id: string, items: () => HomeItem[]) => JSX.Element;
 }) {
   const items = createMemo(() => { freshness(); return getHome(); });
-  const picked = createMemo(() => pickCommittee(items(), current())?.id ?? null);
+  const item = createMemo(() => pickCommittee(items(), current()));
+  const picked = createMemo(() => item()?.id ?? null);
+  // Organizers get the Receipts tab.
+  createRenderEffect(() => item()?.role ?? "member", r => { setNavRole(r === "member" ? "member" : "organizer"); });
   return (
     <Errored fallback={err => <GScreen title={props.title} nav={null}><GNote tone="error">{describeError(err())}</GNote></GScreen>}>
       <Loading fallback={<GScreen title={props.title} nav={null}><GSkeleton /></GScreen>}>

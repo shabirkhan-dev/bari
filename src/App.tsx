@@ -2,19 +2,16 @@ import { createMemo, createRenderEffect, createSignal, Errored, Loading, Match, 
 import { fetchProfile, session, type Profile } from "./lib/auth";
 import { describeError } from "./lib/errors";
 import { match, navigate, path, takeRememberedPath } from "./lib/router";
-import { CompleteProfile, Splash } from "./ui/SignIn";
+import { Splash } from "./ui/SignIn";
+import { ProfileStep } from "./ui/ProfileStep";
 import { Welcome } from "./ui/Welcome";
 import { setMeName } from "./ui/glass";
 import { ActionRow, Dock, Sheet } from "./ui/kit";
 import { IconKey, IconPlus } from "./ui/icons";
 import { t } from "./i18n";
 import { Home } from "./screens/Home";
-import { CreateCommittee } from "./screens/CreateCommittee";
 import { Committee } from "./screens/Committee";
-import { Join } from "./screens/Join";
-import { Me } from "./screens/Me";
 import { Pay } from "./screens/Pay";
-import { Review } from "./screens/Review";
 import { Share } from "./screens/Share";
 import { Settings } from "./screens/Settings";
 import { Activity } from "./screens/Activity";
@@ -25,11 +22,18 @@ import { LedgerG } from "./screens/g/LedgerG";
 import { TossG } from "./screens/g/TossG";
 import { PayToday } from "./screens/g/PayToday";
 import { ReceiptG } from "./screens/g/ReceiptG";
-import { Inbox } from "./screens/Inbox";
+import { OrganizerHomeG } from "./screens/g/OrganizerHomeG";
+import { MembersG } from "./screens/g/MembersG";
+import { ReceiptsG } from "./screens/g/ReceiptsG";
+import { UpdatesG } from "./screens/g/UpdatesG";
+import { SettingsG } from "./screens/g/SettingsG";
+import { NewCommitteeG } from "./screens/g/NewCommitteeG";
+import { JoinG } from "./screens/g/JoinG";
+import { PayoutG } from "./screens/g/PayoutG";
 
 export default function App() {
   return (
-    <Errored fallback={(err, reset) => <Failure message={describeError(err())} retry={reset} />}>
+    <Errored fallback={(err, reset) => { console.error(err()); return <Failure message={describeError(err())} retry={reset} />; }}>
       <Switch>
         <Match when={session() === undefined}>
           <Splash />
@@ -47,7 +51,7 @@ function SignedIn(props: { userId: string }) {
   const profile = createMemo(() => fetchProfile(props.userId));
   return (
     <Loading fallback={<Splash />}>
-      <Show when={profile().phone} fallback={<CompleteProfile profile={profile()} onSaved={() => refresh(profile)} />}>
+      <Show when={profile().phone} fallback={<ProfileStep profile={profile()} onSaved={() => refresh(profile)} />}>
         <Shell me={profile()} onProfileSaved={() => refresh(profile)} />
       </Show>
     </Loading>
@@ -68,7 +72,11 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
     <>
       <Switch fallback={<Home me={props.me} />}>
         <Match when={path() === "/"}>
-          <WithCommittee fallback={legacyHome()}>{(id, items) => <HomeG id={id} items={items} />}</WithCommittee>
+          <WithCommittee fallback={legacyHome()}>{(id, items) => (
+            <Show when={items().find(i => i.id === id)?.role !== "member"} fallback={<HomeG id={id} items={items} />}>
+              <OrganizerHomeG id={id} items={items} />
+            </Show>
+          )}</WithCommittee>
         </Match>
         <Match when={path() === "/ledger"}>
           <WithCommittee title={t("g.l.title")} fallback={legacyHome()}>{id => <LedgerG id={id} />}</WithCommittee>
@@ -76,22 +84,28 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
         <Match when={path() === "/toss"}>
           <WithCommittee title={t("g.t.title")} fallback={legacyHome()}>{id => <TossG id={id} />}</WithCommittee>
         </Match>
-        <Match when={path() === "/me"}><Me me={props.me} onSaved={props.onProfileSaved} /></Match>
-        <Match when={path() === "/new"}><CreateCommittee me={props.me} /></Match>
-        <Match when={match("/join/:code", path())}>{p => <Join code={p().code ?? ""} />}</Match>
-        <Match when={path() === "/join"}><Join /></Match>
+        <Match when={path() === "/members"}>
+          <WithCommittee title={t("m.title")} fallback={legacyHome()}>{(id, items) => <MembersG id={id} items={items} />}</WithCommittee>
+        </Match>
+        <Match when={path() === "/receipts"}>
+          <WithCommittee title={t("rq.title")} fallback={legacyHome()}>{id => <ReceiptsG id={id} nav />}</WithCommittee>
+        </Match>
+        <Match when={path() === "/me"}><SettingsG me={props.me} onSaved={props.onProfileSaved} /></Match>
+        <Match when={path() === "/new"}><NewCommitteeG me={props.me} /></Match>
+        <Match when={match("/join/:code", path())}>{p => <JoinG code={p().code ?? ""} />}</Match>
+        <Match when={path() === "/join"}><JoinG /></Match>
         <Match when={match("/c/:id", path())}>{p => <Committee id={p().id ?? ""} />}</Match>
         <Match when={match("/c/:id/pay", path())}>{p => <PayToday id={p().id ?? ""} me={props.me} />}</Match>
         <Match when={match("/c/:id/pay/:member", path())}>{p => <Pay id={p().id ?? ""} memberId={p().member ?? ""} />}</Match>
         <Match when={match("/c/:id/settings", path())}>{p => <Settings id={p().id ?? ""} />}</Match>
         <Match when={match("/c/:id/activity", path())}>{p => <Activity id={p().id ?? ""} />}</Match>
         <Match when={match("/c/:id/round/:n", path())}>{p => <Round id={p().id ?? ""} n={Number(p().n)} />}</Match>
-        <Match when={path() === "/inbox"}><Inbox /></Match>
-        <Match when={match("/c/:id/review", path())}>{p => <Review id={p().id ?? ""} />}</Match>
+        <Match when={path() === "/inbox"}><UpdatesG /></Match>
+        <Match when={match("/c/:id/review", path())}>{p => <ReceiptsG id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/payout/:n", path())}>{p => <PayoutG id={p().id ?? ""} n={Number(p().n)} />}</Match>
         <Match when={match("/c/:id/review/:sid", path())}>{p => <ReceiptG id={p().id ?? ""} sid={p().sid ?? ""} />}</Match>
         <Match when={path() === "/share"}><Share /></Match>
       </Switch>
-      <Show when={path() === "/me"}><OldDock /></Show>
     </>
   );
 }

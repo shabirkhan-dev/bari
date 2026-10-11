@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Errored, Loading, Match, onSettled, Show, Switch } from "solid-js";
-import { attachReceipt, getDashboard, myLedger, myPayable, recordReceiptReading, submitPayment, type Dashboard, type Ledger, type Payable } from "../../lib/api";
+import { attachReceipt, getDashboard, myLedgerV2, myPayable, recordReceiptReading, submitPayment, type Dashboard, type LedgerV2, type Payable } from "../../lib/api";
 import type { Profile } from "../../lib/auth";
 import { describeError } from "../../lib/errors";
 import { back, navigate } from "../../lib/router";
@@ -7,7 +7,7 @@ import { prepareReceipt, readReceipt, ReceiptError, type PreparedReceipt } from 
 import { takeShared } from "../../lib/shared";
 import { parseJazzCashReceipt, type ParsedReceipt } from "../../domain/receipt";
 import { todayInPKT } from "../../domain/dates";
-import { money, t } from "../../i18n";
+import { clock, money, t } from "../../i18n";
 import { firstName, GIcon, GMoney, GNote, GScreen, GSegmented, GSheet, GSkeleton, Halo, SlideToConfirm, WideHalo } from "../../ui/glass";
 import { tick, useCopy } from "../../ui/kit";
 import { groupedTid, periodOf, periodsLabel, spacedPhone, unitCount } from "./common";
@@ -15,7 +15,7 @@ import { groupedTid, periodOf, periodsLabel, spacedPhone, unitCount } from "./co
 export function PayToday(props: { id: string; me: Profile }) {
   const dash = createMemo(() => getDashboard(props.id));
   const payable = createMemo(() => myPayable(props.id));
-  const ledger = createMemo(() => myLedger(props.id));
+  const ledger = createMemo(() => myLedgerV2(props.id));
   return (
     <Errored fallback={err => <GScreen title={t("g.p.title")}><GNote tone="error">{describeError(err())}</GNote></GScreen>}>
       <Loading fallback={<GScreen title={t("g.p.title")}><GSkeleton /></GScreen>}>
@@ -27,7 +27,7 @@ export function PayToday(props: { id: string; me: Profile }) {
 
 type OcrState = "idle" | "reading" | "done" | "failed";
 
-function PayForm(props: { d: Dashboard; items: Payable[]; l: Ledger; me: Profile }) {
+function PayForm(props: { d: Dashboard; items: Payable[]; l: LedgerV2; me: Profile }) {
   const today = todayInPKT();
   const requestId = crypto.randomUUID(); // the same id on retry, so no duplicate payment
   const c = () => props.d.committee;
@@ -53,7 +53,7 @@ function PayForm(props: { d: Dashboard; items: Payable[]; l: Ledger; me: Profile
   const [paidBy, setPaidBy] = createSignal("");
   const [error, setError] = createSignal("");
   const [help, setHelp] = createSignal(false);
-  const [sent, setSent] = createSignal<{ amount: number; warning: string | null } | null>(null);
+  const [sent, setSent] = createSignal<SentInfo | null>(null);
   const { copied, copy } = useCopy();
   let fileInput: HTMLInputElement | undefined;
 
@@ -114,7 +114,11 @@ function PayForm(props: { d: Dashboard; items: Payable[]; l: Ledger; me: Profile
       const p = parsed();
       if (p) await recordReceiptReading(id, p.amountPaisa ?? null, p.tid || p.amountPaisa ? p.saysSuccessful : null).catch(() => undefined);
       tick();
-      setSent({ amount: total(), warning });
+      setSent({
+        amount: total(), warning, tid: cleanTid, at: parsed()?.occurredAt ?? new Date().toISOString(),
+        receipt: r ? { size: r.blob.size, at: new Date().toISOString(), url: r.previewUrl } : null,
+        organizer: firstName(c().account_title), streak: props.l.streak
+      });
     } catch (e) {
       setError(describeError(e));
     }
@@ -124,7 +128,7 @@ function PayForm(props: { d: Dashboard; items: Payable[]; l: Ledger; me: Profile
   const last4 = () => (props.me.phone ?? "").slice(-4);
 
   return (
-    <Show when={!sent()} fallback={<Sent amount={sent()!.amount} warning={sent()!.warning} />}>
+    <Show when={!sent()} fallback={<Sent s={sent()!} />}>
       <GScreen title={t("g.p.title")} bottom={
         <>
           <Halo w={64} label={t("common.back")} onClick={() => back("/")}><GIcon.undo /></Halo>
@@ -266,20 +270,64 @@ function PayForm(props: { d: Dashboard; items: Payable[]; l: Ledger; me: Profile
   );
 }
 
-function Sent(props: { amount: number; warning: string | null }) {
+interface SentInfo {
+  amount: number; warning: string | null; tid: string | null; at: string;
+  receipt: { size: number; at: string; url: string | null } | null; organizer: string; streak: number;
+}
+
+/** Figma "Payment submitted": what happened, and what's next. */
+function Sent(props: { s: SentInfo }) {
+  const [view, setView] = createSignal(false);
+  const s = () => props.s;
+  const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
+  const step = (done: boolean, title: string, sub: string, time: string | null, last = false) => (
+    <li class="relative flex gap-3.5 pb-5">
+      <Show when={!last}><span class="absolute start-[10px] top-6 h-[calc(100%-18px)] w-[2px]" style={{ background: done ? "var(--g-chip)" : "var(--g-tick)" }} /></Show>
+      <span class="relative grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full"
+        style={done ? { background: "var(--g-chip)", color: "#fff" } : { border: "1.5px dashed var(--g-dash)", background: "var(--g-inner)" }}>
+        <Show when={done}><GIcon.check size={12} /></Show>
+      </span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-baseline justify-between gap-2">
+          <span class="text-[15px] font-medium">{title}</span>
+          <Show when={time}><span class="shrink-0 text-[11px]" style={{ color: "var(--g-faint)" }}>{time}</span></Show>
+        </span>
+        <span class="mt-0.5 block text-[12px]" style={{ color: "var(--g-muted)" }} dir="auto">{sub}</span>
+      </span>
+    </li>
+  );
   return (
-    <GScreen title={t("g.p.title")}>
-      <section class="g-rise flex flex-1 flex-col items-center justify-center gap-4 py-10 text-center">
-        <Halo w={96}><span style={{ color: "var(--g-emerald)" }}><GIcon.check size={36} /></span></Halo>
-        <h2 class="g-serif text-[28px]">{t("pay.sentTitle")}</h2>
-        <GMoney paisa={props.amount} size={40} />
-        <p class="max-w-[19rem] text-[14px]" style={{ color: "var(--g-ink-2)" }}>{t("pay.sentBody", { amount: money(props.amount) })}</p>
-        <Show when={props.warning}><GNote tone="error">{props.warning}</GNote></Show>
-        <div class="mt-4 w-full">
-          <WideHalo h={60} dark onClick={() => navigate("/", { replace: true, direction: "back" })}><span class="text-[15px] font-medium">{t("pay.done")}</span></WideHalo>
-        </div>
+    <GScreen title={t("ps.title")} bare bottom={
+      <>
+        <Show when={s().receipt?.url}>
+          <button type="button" class="g-halo w-[44%] shrink-0" style={{ height: "64px" }} onClick={() => { tick(); setView(true); }}>
+            <span class="g-core justify-start gap-2.5 ps-[5px]">
+              <span class="grid h-10 w-10 place-items-center rounded-full border border-dashed" style={{ "border-color": "var(--g-dash)" }}><GIcon.receipt /></span>
+              <span class="truncate text-[13px] font-medium">{t("ps.view")}</span>
+            </span>
+          </button>
+        </Show>
+        <WideHalo h={64} dark class="flex-1" onClick={() => navigate("/", { replace: true, direction: "back" })}><span class="text-[15px] font-medium">{t("ps.home")}</span></WideHalo>
+      </>
+    }>
+      <section class="g-rise mt-[calc(64px+env(safe-area-inset-top))] flex flex-col items-center text-center">
+        <Halo w={116}><span class="absolute inset-[6px] grid place-items-center rounded-full" style={{ background: "var(--g-chip)", color: "#fff" }}><GIcon.check size={34} /></span></Halo>
+        <h2 class="g-serif mt-5 text-[30px]">{t("ps.title")}</h2>
+        <p class="mt-1 text-[13px]" style={{ color: "var(--g-muted)" }}>{t("ps.sub", { name: s().organizer })}</p>
+        <GMoney paisa={s().amount} size={46} class="mt-3" />
       </section>
+      <ol class="g-card mt-6 px-4 pt-5">
+        {step(true, t("ps.sent"), s().tid ? `TID ${groupedTid(s().tid!)}` : t("ps.noTid"), clock(s().at))}
+        {step(!!s().receipt, t("ps.uploaded"), s().receipt ? t("ps.shot", { size: kb(s().receipt!.size) }) : t("ps.noReceipt"), s().receipt ? clock(s().receipt!.at) : null)}
+        {step(false, t("ps.check"), t("ps.checkSub"), null, true)}
+      </ol>
+      <Show when={s().streak >= 2}>
+        <div class="mt-4 flex justify-center"><span class="g-chip g-chip-green">{t("ps.streak", { n: s().streak })}</span></div>
+      </Show>
+      <Show when={s().warning}><div class="mt-3"><GNote tone="error">{s().warning}</GNote></div></Show>
+      <GSheet open={view()} onClose={() => setView(false)} label={t("ps.view")}>
+        <img src={s().receipt?.url ?? ""} alt={t("ps.view")} class="max-h-[75dvh] w-full rounded-2xl object-contain" />
+      </GSheet>
     </GScreen>
   );
 }
-

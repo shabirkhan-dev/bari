@@ -1,12 +1,20 @@
-// Static PWA served by Cloudflare Workers (static asset requests are free).
+// The PWA's static files plus a small Worker for push notifications (static requests are free).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bari",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-10",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     // Unknown paths load the app (client-side routes, e.g. /join/ABCD2345).
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   },
+  // Public values only. Secrets (SUPABASE_SECRET_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+  // are set in the Cloudflare dashboard, never here.
+  "vars": { "SUPABASE_URL": "https://ohsisapfjtesxfzihqbt.supabase.co" },
+  // Reminders and notifications go out within 5 minutes.
+  "triggers": { "crons": ["*/5 * * * *"] },
   "routes": [{ "pattern": "bari.rabtx.dev", "custom_domain": true }]
 }

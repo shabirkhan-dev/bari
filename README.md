@@ -24,6 +24,7 @@ Digital bachat committee manager for small private groups in Pakistan.
 | A member wins once, keeps paying afterwards | `one_win_per_member` index |
 | Toss: in-app crypto draw (inputs stored, re-checkable) or record a physical toss | `draw_toss(…, 'app' \| 'manual')` |
 | Late or missing money is settled within the family; the app reminds (WhatsApp) and never blocks a payout, but a short pot is recorded in the audit log | `record_payout()` |
+| Optional late fine: a day is late when nothing was sent by the daily deadline; the fine is owed, reminded, and marked paid or waived by an organizer, never blocks anything | `_late()`, `settle_fine()` |
 | Recipient confirms receipt (second confirmation) | `confirm_payout()` |
 | Organizers verify; nobody verifies their own payment (so appoint a co-organizer) | `verify_submission()` |
 | Same TID or same receipt image can't back two claims | partial unique index / `sha256` unique |
@@ -73,6 +74,15 @@ Restore manually: `RESTORE_ADMIN_URL=… BACKUP_PASSPHRASE=… scripts/restore-c
 
 Receipt images live in Supabase Storage and are **not** in this backup yet (see limitations).
 
+## Push notifications (daily reminder, payment checked, toss, fines)
+
+The Worker in `worker/index.ts` serves the app and, every 5 minutes (Cron Trigger in `wrangler.jsonc`), asks Supabase (`push_jobs()`) for due reminders, "late fine added" notices and new in-app notifications, then sends them as Web Push. Until its three secrets are set it does nothing, and the reminder switch says reminders aren't on yet.
+
+1. On your computer: `node scripts/vapid-keys.mjs` prints `VAPID_PUBLIC_KEY=…` and `VAPID_PRIVATE_KEY=…`.
+2. Cloudflare → Workers & Pages → **bari** → Settings → Variables and Secrets → add three **Secrets** (type "Secret", not "Text"):
+   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `SUPABASE_SECRET_KEY` (Supabase → Project Settings → API Keys → a **secret** key `sb_secret_…`).
+3. Redeploy (or push any commit). Never paste these into chat, the repo or `.env.production`.
+
 ## Environment variables
 
 | Name | Purpose |
@@ -96,7 +106,7 @@ SHOTS=1 npx playwright test shots   # screenshots of the Figma screens, light/da
 
 ## Screens and states (for design)
 
-Built from the Figma file (glass design, `src/ui/glass.tsx`, `src/screens/g/`):
+Built from the Figma file (glass design, `src/ui/glass.tsx`, `src/screens/g/`). Every screen is in light/dark × English/Urdu.
 
 | Route | Screen | Notes |
 |---|---|---|
@@ -106,30 +116,35 @@ Built from the Figma file (glass design, `src/ui/glass.tsx`, `src/screens/g/`):
 | `/toss` | Toss | who's in the draw; organizer slides to toss on toss day; payout details stay on `/c/:id/round/:n` |
 | `/c/:id/pay` | Pay today | oldest unpaid days first (1 / 3 / 7 adapts to what's owed); receipt read on the phone |
 | `/c/:id/review/:sid` | Receipt check | checks: amount read off the receipt, receipt says successful, TID present (unique by rule) |
+| first sign-in | Your JazzCash number | Figma "Verify phone" look on a keypad, without SMS (sign-in stays Google); then your name |
+| `/join/:code` | Join | preview (organizer, amounts, rules incl. fine, who joined), slide to join |
+| after paying | Payment submitted | sent → receipt uploaded → organizer check, streak |
+| `/members` | Members | who paid today, each member's days this round; tap for WhatsApp reminder, call, record a payment, settle fines (organizer) |
+| `/toss` (drawn) | Toss result | winner, payout status, draw record anyone can re-check, share |
+| `/toss` (organizer, toss day) | Live toss | 3-second countdown everyone watching sees (Supabase Realtime), cancel before the pick; the server draws |
+| `/inbox` | Updates | grouped by day, unread dots, mark all as read |
+| `/me` | Settings | appearance, language, daily reminder (push), JazzCash number, rules, log out |
+| `/new` | New committee | amount, round length, members, optional late fine, daily deadline; frequency, account and start date under "Payments go to …" |
+| `/c/:id` (forming) | Invite | code, copy/share, members and open spots, slide to start when full |
+| `/` (organizer) | Organizer home | collected today, receipts to check (quick approve/reject), not paid yet, this round, your own payment |
+| `/receipts`, `/c/:id/review` | Receipts | waiting / approved / rejected |
+| `/c/:id/payout/:n` | Payout | winner's number, attach proof (visible to all members), slide to confirm |
 
 Still in the earlier look until their Figma frames exist:
 
 | Route | Screen | States to design |
 |---|---|---|
-| first sign-in | One quick step | empty, filled, validation error |
 | `/` (nothing running) | Committee list | nothing due ("all paid up"), due + late, empty (no committees), loading |
-| `/inbox` | Notifications | unread/read, empty |
-| `/new` | New committee | daily/weekly/monthly/custom, live summary, validation errors |
-| `/join`, `/join/CODE` | Join | empty, code filled, wrong/expired code, full |
-| `/c/:id` forming | Committee (forming) | seats filling, invite code, full → Start, start confirmation sheet, member view |
-| `/c/:id` running | Committee (running) | ring with seat statuses, banners (to check, toss due, confirm payout, limits), my status (late/due/checking/paid/not started), members with Remind / Record payment, rounds |
-| `/c/:id/pay` | Record a payment | day picker, receipt reading/read/failed/mismatch, someone else paid, sending, sent |
-| `/c/:id/pay/:member` | Record for a member | as above, titled for the member |
-| `/c/:id/review` | Payments to check | items with/without receipt, own payment (can't decide), reject sheet, empty |
-| `/c/:id/round/:n` | Round | before toss (in/out lists, not yet, draw sheets), after draw (winner, verification), payout form (with shortfall note), waiting for recipient, recipient confirm/problem, received, disputed |
-| `/c/:id/settings` | Settings | organizer form, schedule locked, members & roles, invite codes, leave |
+| `/c/:id` running, via Members → Rounds | Committee (running) | rounds list, banners, limits |
+| `/c/:id/pay/:member` | Record for a member (organizer) | day picker, receipt, someone else paid, sent |
+| `/c/:id/round/:n` | Round details | in/out lists, in-person toss, payout form, recipient confirm/problem, disputed |
+| `/c/:id/settings` | Committee settings | organizer form, daily cutoff, schedule locked, members & roles, invite codes, leave |
 | `/c/:id/activity` | Activity | list, empty |
-| `/me` | Profile | language, appearance, profile form |
 | `/share` | Shared receipt | pick committee, nothing arrived, no running committee |
 
 ## Status
 
-- [x] Schema, RLS, transactional money rules, 46 database + unit tests
+- [x] Schema, RLS, transactional money rules, 53 database + unit tests
 - [x] Supabase + Google sign-in, live at https://bari.rabtx.dev
 - [x] Committees: create, invite, join, start, settings, co-organizers, leave/remove (before start), activity log
 - [x] Payments: pick days, receipt with on-device OCR, Android share target, record for a member, organizer review
@@ -137,8 +152,10 @@ Still in the earlier look until their Figma frames exist:
 - [x] Notifications, WhatsApp reminders, JazzCash monthly-limit warnings, English/Urdu, light/dark
 - [x] Nightly encrypted backup with restore check; CI on every push
 - [x] Figma design: Welcome, Home, Pay today, Ledger, Toss, Receipt check (light/dark, English/Urdu)
-- [ ] Figma design for the remaining screens (members, settings, rounds, notifications, profile, create/join)
-- [ ] Push notifications (in-app only for now)
+- [x] Figma design for the member and organizer screens (13 more)
+- [x] Optional late fines (per committee, set before it starts; organizer marks paid or waived; never blocks the toss)
+- [x] Push notifications: daily reminder and every in-app update (needs the three Worker secrets above)
+- [ ] Figma design for: committee settings, round details, activity
 - [ ] Receipt images in the backup
 
 ## Known limitations

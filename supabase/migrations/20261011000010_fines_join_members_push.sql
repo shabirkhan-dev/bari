@@ -72,6 +72,21 @@ begin
   perform _audit(o.committee_id, 'fine.' || p_status, 'obligation', o.id, jsonb_build_object('amount_paisa', f.fine_paisa));
 end $$;
 
+-- Open fines of one member (the member, or an organizer settling them).
+create or replace function public.member_fines(p_member_id uuid) returns jsonb
+language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare m committee_members;
+begin
+  perform _require_user();
+  select * into m from committee_members where id = p_member_id;
+  if not found or not (m.user_id = auth.uid() or is_organizer(m.committee_id)) then
+    raise exception 'Member not found' using errcode = '42501';
+  end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('obligation_id', f.obligation_id, 'due_date', f.due_date,
+            'round', f.round, 'fine_paisa', f.fine_paisa) order by f.due_date), '[]')
+            from _late(m.committee_id) f where f.member_id = m.id and f.settled is null);
+end $$;
+
 -- ───────── Streak: consecutive verified contributions up to the latest due one ─────────
 create or replace function public._streak(p_member_id uuid) returns int
 language sql stable security definer set search_path = public, pg_temp as $$
@@ -217,7 +232,7 @@ create or replace function public.set_reminder(p_on boolean, p_time time, p_lang
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   perform _require_user();
-  update profiles set reminder_on = p_on, reminder_time = coalesce(p_time, reminder_time),
+  update profiles set reminder_on = coalesce(p_on, reminder_on), reminder_time = coalesce(p_time, reminder_time),
                       lang = coalesce(p_lang, lang) where id = auth.uid();
 end $$;
 
@@ -294,6 +309,38 @@ language sql security definer set search_path = public, pg_temp as $$
   delete from push_subscriptions where endpoint = any(p_endpoints)
 $$;
 
+-- ───────── Richer notifications ("Ayesha verified Day 17 · your streak is 17 days") ─────────
+create or replace function public._enrich_notification() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare s payment_submissions;
+begin
+  if new.committee_id is not null then
+    new.payload := new.payload || jsonb_build_object('frequency', (select frequency from committees where id = new.committee_id));
+  end if;
+  if new.kind in ('payment.verified', 'payment.rejected', 'payment.submitted') and new.payload ? 'submission_id' then
+    select * into s from payment_submissions where id = (new.payload->>'submission_id')::uuid;
+    if found then
+      new.payload := new.payload || jsonb_build_object(
+        'by_name', (select display_name from profiles where id = coalesce(s.decided_by, s.submitted_by)),
+        'periods', (select jsonb_agg(_period_in_round(a.obligation_id) order by o.due_date)
+                      from payment_allocations a join contribution_obligations o on o.id = a.obligation_id
+                     where a.submission_id = s.id));
+      if new.kind = 'payment.verified' then
+        new.payload := new.payload || jsonb_build_object('streak', _streak(s.member_id));
+      end if;
+    end if;
+  elsif new.kind = 'toss.drawn' and new.payload ? 'winner_member_id' then
+    new.payload := new.payload || jsonb_build_object('winner_name',
+      (select p.display_name from committee_members m join profiles p on p.id = m.user_id
+        where m.id = (new.payload->>'winner_member_id')::uuid));
+  end if;
+  return new;
+end $$;
+drop trigger if exists enrich_notification on public.notifications;
+create trigger enrich_notification before insert on public.notifications
+  for each row execute function public._enrich_notification();
+revoke execute on function public._enrich_notification() from public, anon, authenticated;
+
 -- ───────── Grants ─────────
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
@@ -304,6 +351,8 @@ revoke execute on function public._deadline(date, time) from public, anon;
 revoke execute on function public._late(uuid) from public, anon, authenticated;
 revoke execute on function public.settle_fine(uuid, text) from public, anon;
 revoke execute on function public._streak(uuid) from public, anon, authenticated;
+revoke execute on function public.member_fines(uuid) from public, anon;
+grant execute on function public.member_fines(uuid) to authenticated;
 revoke execute on function public.my_ledger_v2(uuid) from public, anon;
 revoke execute on function public.committee_dashboard_v4(uuid) from public, anon;
 revoke execute on function public.invitation_preview(text) from public, anon;

@@ -43,6 +43,17 @@ export const GIcon = {
   filter: (p: IP) => svg(p.size ?? 16, <><path d="M4 7h16" /><path d="M7 12h10" /><path d="M10 17h4" /></>, 2),
   x: (p: IP) => svg(p.size ?? 16, <><path d="M6 6l12 12" /><path d="M18 6 6 18" /></>, 2),
   plus: (p: IP) => svg(p.size ?? 18, <><path d="M12 5v14" /><path d="M5 12h14" /></>, 2),
+  receipt: (p: IP) => svg(p.size ?? 18, <><path d="M6 3.5h12v17l-2.5-1.5L13 20.5 10.5 19 8 20.5 6 19z" /><path d="M9 8h6" /><path d="M9 11.5h6" /><path d="M9 15h3.5" /></>),
+  shield: (p: IP) => svg(p.size ?? 18, <><path d="M12 3.5 19 6v5.5c0 4.3-2.9 7.7-7 9-4.1-1.3-7-4.7-7-9V6z" /><path d="m9 12 2.2 2.2L15.5 10" /></>),
+  share: (p: IP) => svg(p.size ?? 18, <><path d="M12 15V4" /><path d="m7.5 8.5 4.5-4.5 4.5 4.5" /><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" /></>),
+  phone: (p: IP) => svg(p.size ?? 18, <path d="M6.6 3.5h2.6l1.5 4-2 1.3a11 11 0 0 0 6.5 6.5l1.3-2 4 1.5v2.6a2 2 0 0 1-2.1 2A16.5 16.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z" />),
+  logout: (p: IP) => svg(p.size ?? 18, <><path d="M14 4.5H6.5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1H14" /><path d="M10 12h10" /><path d="m16.5 8.5 3.5 3.5-3.5 3.5" /></>, 1.7, "rtl:-scale-x-100"),
+  clock: (p: IP) => svg(p.size ?? 18, <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>),
+  info: (p: IP) => svg(p.size ?? 18, <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5" /><circle cx="12" cy="8" r=".6" fill="currentColor" /></>),
+  money: (p: IP) => svg(p.size ?? 18, <><rect x="3.5" y="6.5" width="17" height="11" rx="2" /><circle cx="12" cy="12" r="2.5" /></>),
+  backspace: (p: IP) => svg(p.size ?? 20, <><path d="M9 5.5h10.5a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9L3.5 12z" /><path d="m12 9.5 5 5" /><path d="m17 9.5-5 5" /></>, 1.7, "rtl:-scale-x-100"),
+  chat: (p: IP) => svg(p.size ?? 18, <path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.1-4A8 8 0 1 1 20 12z" />),
+  gear: (p: IP) => svg(p.size ?? 18, <><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M6 18l1.4-1.4M16.6 7.4 18 6" /></>),
   key: (p: IP) => svg(p.size ?? 18, <><circle cx="8.5" cy="12" r="4" /><path d="M12.5 12H21" /><path d="M18 12v3" /></>, 1.8),
   google: (p: IP) => (
     <svg width={p.size ?? 18} height={p.size ?? 18} viewBox="0 0 24 24" aria-hidden="true">
@@ -98,14 +109,14 @@ export function WideHalo(props: { h: number; dark?: boolean; onClick?: () => voi
 /* ───────────── Money ───────────── */
 
 /** "Rs 30,000" + ".00" in light grey; Newsreader. Respects "hide amounts" when `hideable`. */
-export function GMoney(props: { paisa: Paisa; size: number; prefix?: boolean; hideable?: boolean; class?: string; tight?: number; plainCents?: boolean }) {
+export function GMoney(props: { paisa: Paisa; size: number; prefix?: boolean; hideable?: boolean; class?: string; tight?: number; plainCents?: boolean; noCents?: boolean }) {
   const p = () => moneyParts(props.paisa);
   const masked = () => !!props.hideable && hidden();
   return (
     <span dir="ltr" class={["g-num inline-block whitespace-nowrap leading-none", props.class]}
       style={{ "font-size": `${props.size}px`, "letter-spacing": `${props.tight ?? -0.025}em` }}>
       <Show when={!masked()} fallback={<>{props.prefix === false ? "" : "Rs "}<span aria-label="hidden">••••</span></>}>
-        {props.prefix === false ? "" : "Rs "}{p().whole}<span style={props.plainCents ? undefined : { color: "var(--g-decimal)" }}>.{p().cents}</span>
+        {props.prefix === false ? "" : "Rs "}{p().whole}<Show when={!props.noCents || p().cents !== "00"}><span style={props.plainCents ? undefined : { color: "var(--g-decimal)" }}>.{p().cents}</span></Show>
       </Show>
     </span>
   );
@@ -154,11 +165,11 @@ export function Bell() {
 
 export function GScreen(props: {
   title?: string; left?: "me" | "back"; backTo?: string; children: JSX.Element;
-  bottom?: JSX.Element; nav?: string | null; class?: string;
+  bottom?: JSX.Element; nav?: string | null; class?: string; bare?: boolean;
 }) {
   return (
     <div class="g flex flex-col">
-      <header class="relative z-10 flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))]">
+      <header class={["relative z-10 flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))]", props.bare && "hidden"]}>
         <Show when={props.left === "back"} fallback={
           <Halo w={56} href="/me" label={t("tabs.me")}>
             <GAvatar name={meName() || "?"} size={42} />
@@ -189,12 +200,18 @@ export function GScreen(props: {
 
 /* ───────────── Bottom navigation ───────────── */
 
+const [navRole, setNavRole] = createSignal<"member" | "organizer">("member");
+/** Organizers get Receipts in place of Ledger (their own ledger stays on Home). */
+export { setNavRole };
+
 export function BottomNav(props: { committeeId: string | null }) {
   const tabs = () => [
     { to: "/", label: t("g.tab.home"), icon: GIcon.home },
-    { to: "/ledger", label: t("g.tab.ledger"), icon: GIcon.ledger },
+    navRole() === "organizer"
+      ? { to: "/receipts", label: t("rq.tabs"), icon: GIcon.receipt }
+      : { to: "/ledger", label: t("g.tab.ledger"), icon: GIcon.ledger },
     { to: "/toss", label: t("g.tab.toss"), icon: GIcon.toss },
-    { to: props.committeeId ? `/c/${props.committeeId}` : "/", label: t("g.tab.members"), icon: GIcon.members }
+    { to: "/members", label: t("g.tab.members"), icon: GIcon.members }
   ];
   return (
     <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[480px] -translate-x-1/2 px-5 pb-[calc(10px+env(safe-area-inset-bottom))] pt-3"
@@ -202,12 +219,12 @@ export function BottomNav(props: { committeeId: string | null }) {
       <nav aria-label="Main" class="g-halo w-full" style={{ height: "70px" }}>
         <span class="g-core justify-between px-0" style={{ gap: "0" }}>
           <For each={tabs()}>{(tab, i) => {
-            const active = () => (i() < 3 ? path() === tab.to : false);
+            const active = () => path() === tab.to;
             return (
               <a href={tab.to} aria-current={active() ? "page" : undefined}
                 class="flex h-full flex-1 flex-col items-center justify-center gap-1 rounded-full text-[11px] font-medium transition-colors"
                 style={active() ? { background: "var(--g-cta)", color: "var(--g-cta-ink)" } : { color: "var(--g-ink)" }}
-                onClick={e => { e.preventDefault(); tick(); navigate(tab.to, { replace: i() < 3, direction: i() < 3 ? "none" : "forward" }); }}>
+                onClick={e => { e.preventDefault(); tick(); navigate(tab.to, { replace: true, direction: "none" }); }}>
                 <tab.icon />
                 <span>{tab.label}</span>
               </a>
@@ -294,7 +311,7 @@ export function SlideToConfirm(props: {
             <span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           </Show>
         </span>
-        <span class="ps-11 text-[14px] font-medium" style={{ opacity: Math.max(0, 1 - x() / Math.max(1, max())) }}>
+        <span class="min-w-0 truncate whitespace-nowrap ps-11 text-[14px] font-medium" style={{ opacity: Math.max(0, 1 - x() / Math.max(1, max())) }}>
           {busy() ? props.busyLabel ?? props.label : props.label}
         </span>
         <Show when={props.chevrons && !busy()}>
@@ -354,5 +371,63 @@ export function GSkeleton(props: { h?: number; count?: number }) {
     <div class="flex flex-col gap-3" aria-busy="true" aria-label={t("common.loading")}>
       <For each={Array.from({ length: props.count ?? 3 })}>{() => <div class="g-card skeleton" style={{ height: `${props.h ?? 120}px`, background: "var(--g-card)" }} />}</For>
     </div>
+  );
+}
+
+/** On/off switch in the design's emerald pill style. */
+export function Toggle(props: { on: boolean; label: string; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button type="button" role="switch" aria-checked={props.on ? "true" : "false"} aria-label={props.label} disabled={props.disabled}
+      class="relative h-[30px] w-[54px] shrink-0 rounded-full transition-colors disabled:opacity-50"
+      style={{ background: props.on ? "var(--g-chip)" : "var(--g-tick)" }}
+      onClick={() => { tick(); props.onChange(!props.on); }}>
+      <span class="absolute top-[3px] h-6 w-6 rounded-full bg-white shadow transition-[inset-inline-start] duration-200"
+        style={{ "inset-inline-start": props.on ? "27px" : "3px" }} />
+    </button>
+  );
+}
+
+/** − n + with halo buttons. */
+export function GStepper(props: { value: number; min: number; max: number; onChange: (v: number) => void; label: string }) {
+  return (
+    <div class="flex items-center gap-3" role="group" aria-label={props.label}>
+      <Halo w={52} label={`− ${props.label}`} disabled={props.value <= props.min} onClick={() => props.onChange(Math.max(props.min, props.value - 1))}><span class="text-[20px]">−</span></Halo>
+      <output class="g-num min-w-8 text-center text-[30px]" aria-live="polite">{props.value}</output>
+      <Halo w={52} label={`+ ${props.label}`} disabled={props.value >= props.max} onClick={() => props.onChange(Math.min(props.max, props.value + 1))}><span class="text-[20px]">+</span></Halo>
+    </div>
+  );
+}
+
+/** Text field in the glass style. */
+export const gInput = "h-[60px] w-full rounded-[22px] px-5 text-[17px] outline-none";
+export const gInputStyle = { background: "var(--g-card-strong)", border: "1px solid var(--g-card-border)", color: "var(--g-ink)", "box-shadow": "var(--g-card-shadow)" } as const;
+
+/** Small uppercase-less section label above a control. */
+export function GLabel(props: { children: JSX.Element; for?: string }) {
+  return <label for={props.for} class="mb-2 mt-4 block px-1 text-[13px]" style={{ color: "var(--g-ink-2)" }}>{props.children}</label>;
+}
+
+/** A row inside a glass card: icon halo, title, detail, trailing control. */
+export function GRow(props: { icon: JSX.Element; title: string; sub?: string; trailing?: JSX.Element; onClick?: () => void; href?: string; tone?: string; last?: boolean }) {
+  const inner = () => (
+    <>
+      <Halo w={48}><span style={{ color: props.tone ?? "var(--g-ink)" }}>{props.icon}</span></Halo>
+      <span class="min-w-0 flex-1 text-start">
+        <span class="block truncate text-[15px] font-medium">{props.title}</span>
+        <Show when={props.sub}><span class="mt-0.5 block truncate text-[12px]" style={{ color: "var(--g-muted)" }}>{props.sub}</span></Show>
+      </span>
+      {props.trailing}
+    </>
+  );
+  const cls = "flex w-full items-center gap-3 py-3";
+  return (
+    <>
+      <Show when={props.onClick || props.href} fallback={<div class={cls}>{inner()}</div>}>
+        <Show when={props.href} fallback={<button type="button" class={cls} onClick={() => { tick(); props.onClick?.(); }}>{inner()}</button>}>
+          <a href={props.href} class={cls} onClick={e => { e.preventDefault(); tick(); navigate(props.href!); }}>{inner()}</a>
+        </Show>
+      </Show>
+      <Show when={!props.last}><div class="g-divider ms-[60px]" /></Show>
+    </>
   );
 }
