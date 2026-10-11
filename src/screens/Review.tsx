@@ -4,7 +4,8 @@ import { receiptUrl, rejectSubmission, reviewQueue, verifySubmission, type Revie
 import { describeError } from "../lib/errors";
 import { dateShort, lang, money, t } from "../i18n";
 import { Avatar, Badge, Button, Card, ErrorNote, inputClass, Money, Screen, Sheet, Skeleton, tick, useCopy } from "../ui/kit";
-import { IconCheck, IconCopy } from "../ui/icons";
+import { IconCheck, IconChevron, IconCopy } from "../ui/icons";
+import { navigate } from "../lib/router";
 
 export function Review(props: { id: string }) {
   const queue = createMemo(() => { freshness(); return reviewQueue(props.id); });
@@ -24,7 +25,7 @@ export function Review(props: { id: string }) {
             </section>
           }>
             <ul class="flex flex-col gap-4">
-              <For each={queue()}>{item => <li><ReviewCard item={item} onDone={reload} onReject={() => setRejecting(item)} /></li>}</For>
+              <For each={queue()}>{item => <li><ReviewCard cid={props.id} item={item} onDone={reload} onReject={() => setRejecting(item)} /></li>}</For>
             </ul>
           </Show>
         </Loading>
@@ -34,7 +35,7 @@ export function Review(props: { id: string }) {
   );
 }
 
-function ReviewCard(props: { item: ReviewItem; onDone: () => void; onReject: () => void }) {
+function ReviewCard(props: { cid: string; item: ReviewItem; onDone: () => void; onReject: () => void }) {
   const url = createMemo(() => (props.item.receipt_path ? receiptUrl(props.item.receipt_path) : Promise.resolve(null)));
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
@@ -51,14 +52,16 @@ function ReviewCard(props: { item: ReviewItem; onDone: () => void; onReject: () 
 
   return (
     <Card class="flex flex-col gap-4">
-      <div class="flex items-center gap-3">
+      <a href={`/c/${props.cid}/review/${props.item.id}`} class="flex items-center gap-3 rounded-[20px] active:opacity-70"
+        onClick={e => { e.preventDefault(); tick(); navigate(`/c/${props.cid}/review/${props.item.id}`); }}>
         <Avatar name={props.item.member_name} />
         <div class="min-w-0 flex-1">
           <p class="truncate text-[17px] font-semibold">{props.item.member_name}</p>
           <p class="text-sm text-ink-2">{t("review.covers", { dates: dates() })}</p>
         </div>
         <Money paisa={props.item.amount_paisa} size="md" />
-      </div>
+        <span class="text-ink-3 rtl:-scale-x-100"><IconChevron /></span>
+      </a>
 
       <div class="flex gap-4">
         <Loading fallback={<div class="skeleton h-36 w-28 shrink-0" />}>

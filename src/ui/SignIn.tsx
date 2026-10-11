@@ -1,8 +1,7 @@
 import { createSignal, Show, untrack } from "solid-js";
-import { saveProfile, signInWithGoogle, type Profile } from "../lib/auth";
+import { saveProfile, type Profile } from "../lib/auth";
 import { formatPkMobile, normalizePkMobile } from "../domain/phone";
 import { describeError } from "../lib/errors";
-import { rememberPath } from "../lib/router";
 import { lang, setLang, t } from "../i18n";
 import { Button, ErrorNote, Field, inputClass, tick } from "./kit";
 import { Mark } from "./Mark";
@@ -23,47 +22,6 @@ export function LangSwitch() {
       lang={lang() === "ur" ? "en" : "ur"}>
       {lang() === "ur" ? "English" : "اردو"}
     </button>
-  );
-}
-
-export function Login() {
-  const [busy, setBusy] = createSignal(false);
-  const [error, setError] = createSignal("");
-
-  const start = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      if (location.pathname !== "/") rememberPath(location.pathname); // e.g. an invite link
-      await signInWithGoogle(); // navigates away to Google
-    } catch (e) {
-      setError(describeError(e));
-      setBusy(false);
-    }
-  };
-
-  return (
-    <main class="flex min-h-dvh flex-col bg-bg px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-[calc(16px+env(safe-area-inset-top))]">
-      <div class="flex justify-end"><LangSwitch /></div>
-      <div class="flex flex-1 flex-col items-center justify-center gap-8 text-center">
-        <div class="relative grid place-items-center">
-          <div class="absolute h-56 w-56 rounded-full bg-brand/10 blur-2xl" aria-hidden="true" />
-          <div class="relative grid h-40 w-40 place-items-center rounded-full border border-line bg-surface shadow-[0_24px_60px_-28px_rgb(15_95_79/0.6)]">
-            <Mark size={104} />
-          </div>
-        </div>
-        <div class="flex flex-col items-center gap-3">
-          <h1 class="latin text-[64px] font-bold leading-none tracking-tight">bari</h1>
-          <p class="text-xl text-ink-2">{t("app.tagline")}</p>
-        </div>
-        <p class="max-w-[19rem] text-[17px] leading-relaxed text-ink-2">{t("login.pitch")}</p>
-      </div>
-      <div class="mx-auto flex w-full max-w-sm flex-col gap-4">
-        <Show when={error()}><ErrorNote message={error()} /></Show>
-        <Button disabled={busy()} onClick={start}>{busy() ? t("login.opening") : t("login.google")}</Button>
-        <p class="text-center text-sm text-ink-3">{t("app.safetyShort")}</p>
-      </div>
-    </main>
   );
 }
 

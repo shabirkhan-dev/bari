@@ -32,6 +32,7 @@ export function makeState() {
       committee: { id: "c1", name: "Family committee", description: null, status: "active", member_count: 5, contribution_paisa: 20000,
         frequency: "daily", interval_days: null, periods_per_round: 30, start_date: start, payout_paisa: 3000000,
         account_title: "Shabir Khan", account_number: "03001234567", instructions: "Send by 9 pm." },
+      cutoff: "21:00",
       me: { member_id: "m0", role: "owner" },
       current_round: 1,
       pending_reviews: 1,
@@ -41,11 +42,23 @@ export function makeState() {
       members: [member(0, { overdue_paisa: 40000, overdue_count: 2 }), member(1, { today_state: "verified" }),
         member(2, { overdue_paisa: 60000, overdue_count: 3 }), member(3, { today_state: "submitted", pending_paisa: 20000 }), member(4)]
     },
-    payable: [-2, -1, 0, 1, 2, 3, 4, 5].map((d, i) => ({ id: `o${i}`, due_date: addDays(TODAY, d), amount_paisa: 20000, state: "due" })),
+    ledger: {
+      today: TODAY, member_id: "m0", current_round: 1, periods_per_round: 30,
+      rounds: [1, 2, 3, 4, 5].map(r => ({ round: r, first_due: addDays(start, (r - 1) * 30), toss_date: addDays(start, r * 30 - 1),
+        total_paisa: 600000, paid_paisa: r === 1 ? 140000 : 0, waiting_paisa: 0, unpaid_paisa: r === 1 ? 60000 : 0 })),
+      days: Array.from({ length: 30 }, (_, i) => ({ id: `d${i}`, due_date: addDays(start, i), amount_paisa: 20000, n: i + 1,
+        state: i < 7 ? "verified" : "due" })),
+      history: [
+        { id: "h2", created_at: new Date().toISOString(), amount_paisa: 20000, status: "pending", decision_reason: null, decided_at: null, tid: "731900426615", paid_by_name: null, periods: [{ round: 1, n: 7 }] },
+        { id: "h1", created_at: new Date(Date.now() - 864e5).toISOString(), amount_paisa: 120000, status: "verified", decision_reason: null, decided_at: new Date(Date.now() - 80e6).toISOString(), tid: "726755086850", paid_by_name: null, periods: [{ round: 1, n: 1 }, { round: 1, n: 6 }] }
+      ]
+    },
+    payable: [-2, -1, 0, 1, 2, 3, 4, 5].map(d => ({ id: `d${9 + d}`, due_date: addDays(TODAY, d), amount_paisa: 20000, state: "due" })),
     queue: [
       { id: "s1", status: "pending", member_id: "m3", member_name: "Sumera Khan", member_phone: "03001234563", submitted_by_name: "Sumera Khan",
         paid_by_name: null, amount_paisa: 20000, tid: "726755086850", transferred_at: null, created_at: TODAY, due_dates: [TODAY],
-        receipt_path: null, receipt_type: null, can_decide: true }
+        receipt_path: null, receipt_type: null, receipt_size: null, receipt_created_at: null, receipt_amount_paisa: 20000, receipt_successful: true,
+        periods: [{ round: 1, n: 10 }], can_decide: true }
     ],
     eligibility: [
       { member_id: "m0", eligible: false, reason: "arrears", arrears_paisa: 40000 },
@@ -105,7 +118,8 @@ export async function setup(page: Page, opts: { state?: State; lang?: "en" | "ur
     if (url.pathname.startsWith("/rest/v1/rpc/")) {
       switch (rpc) {
         case "my_home": return json(route, state.home);
-        case "committee_dashboard_v2": return json(route, state.dashboard);
+        case "committee_dashboard_v2": case "committee_dashboard_v3": return json(route, state.dashboard);
+        case "my_ledger": return json(route, state.ledger);
         case "my_payable": case "member_payable": return json(route, state.payable);
         case "review_queue": return json(route, state.queue);
         case "toss_eligibility": return json(route, state.eligibility);

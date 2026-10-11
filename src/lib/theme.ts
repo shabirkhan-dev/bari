@@ -18,7 +18,7 @@ export { theme };
 function apply(choice: ThemeChoice) {
   const dark = choice === "dark" || (choice === "auto" && media.matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#090e0c" : "#eef1ef");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#121413" : "#e6e6e3");
 }
 apply(theme());
 media.addEventListener("change", () => apply(theme()));

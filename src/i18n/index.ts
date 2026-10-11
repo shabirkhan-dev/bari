@@ -17,19 +17,11 @@ function initial(): Lang {
 const [lang, setLangSignal] = createSignal<Lang>(initial());
 export { lang };
 
-let fontLoaded = false;
 function apply(l: Lang) {
   if (typeof document === "undefined") return; // tests / non-browser
   const html = document.documentElement;
   html.lang = l;
   html.dir = l === "ur" ? "rtl" : "ltr";
-  if (l === "ur" && !fontLoaded) {
-    fontLoaded = true;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap";
-    document.head.appendChild(link);
-  }
 }
 apply(lang());
 
@@ -79,3 +71,38 @@ export const dateLong = (d: LocalDate) => fmt({ day: "numeric", month: "short", 
 export const dateDay = (d: LocalDate) => fmt({ weekday: "short", day: "numeric", month: "short" })(d);
 /** "Mon" / "پیر" */
 export const weekday = (d: LocalDate) => fmt({ weekday: "short" })(d);
+
+/* ── Glass design helpers ── */
+
+/** "30,000" and "00": the design shows decimals in a lighter grey. */
+export function moneyParts(paisa: Paisa): { whole: string; cents: string } {
+  const abs = Math.abs(paisa);
+  return { whole: (paisa < 0 ? "−" : "") + groupEn.format(Math.floor(abs / 100)), cents: String(abs % 100).padStart(2, "0") };
+}
+
+const urPeriod = (h: number) => (h < 12 ? "صبح" : h < 16 ? "دوپہر" : h < 19 ? "شام" : "رات");
+
+/** Hour and minute in Pakistan time from an ISO timestamp: "10:40 am" / "صبح 10:40". */
+export function clock(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", hour: "numeric", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(new Date(iso));
+  const h = Number(parts.find(p => p.type === "hour")?.value ?? 0);
+  const m = parts.find(p => p.type === "minute")?.value ?? "00";
+  return hm(h, m);
+}
+
+function hm(h: number, m: string, dropZero = false): string {
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const mm = dropZero && m === "00" ? "" : `:${m}`;
+  return lang() === "ur" ? `${urPeriod(h)} ${h12}${mm}` : `${h12}${mm} ${h < 12 ? "am" : "pm"}`;
+}
+
+/** "21:00" → "9 pm" / "رات 9" */
+export function timeOfDay(hhmm: string): string {
+  const [h = "0", m = "00"] = hhmm.split(":");
+  return hm(Number(h), m.padStart(2, "0"), true);
+}
+
+/** Pakistan calendar date of an ISO timestamp. */
+export const pktDate = (iso: string): LocalDate =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date(iso)) as LocalDate;

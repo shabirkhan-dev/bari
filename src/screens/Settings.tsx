@@ -1,6 +1,6 @@
 import { createMemo, createSignal, Errored, For, Loading, refresh, Show, untrack } from "solid-js";
 import {
-  getDashboard, leaveCommittee, removeMember, revokeInvitations, setMemberRole, updateCommittee,
+  getDashboard, leaveCommittee, removeMember, revokeInvitations, setMemberRole, updateCommittee, setDailyCutoff,
   type Dashboard, type DashboardMember
 } from "../lib/api";
 import { describeError } from "../lib/errors";
@@ -8,7 +8,7 @@ import { navigate } from "../lib/router";
 import { todayInPKT } from "../domain/dates";
 import { rupees } from "../domain/money";
 import { formatPkMobile, normalizePkMobile } from "../domain/phone";
-import { t } from "../i18n";
+import { t, timeOfDay } from "../i18n";
 import { ActionRow, Avatar, Badge, Button, Card, ErrorNote, Field, inputClass, Screen, Sheet, Skeleton } from "../ui/kit";
 import { IconClock } from "../ui/icons";
 
@@ -144,6 +144,7 @@ function DetailsForm(props: { d: Dashboard; forming: boolean; onSaved: () => voi
   const [title, setTitle] = createSignal(c.account_title);
   const [recv, setRecv] = createSignal(lim.receive_limit_paisa ? String(lim.receive_limit_paisa / 100) : "");
   const [send, setSend] = createSignal(lim.send_limit_paisa ? String(lim.send_limit_paisa / 100) : "");
+  const [cutoff, setCutoff] = createSignal(untrack(() => props.d.cutoff) || "21:00");
   const [state, setState] = createSignal<"idle" | "saving" | "saved">("idle");
   const [error, setError] = createSignal("");
   const accountChanged = () => normalizePkMobile(acct()) !== c.account_number || title().trim() !== c.account_title;
@@ -163,6 +164,7 @@ function DetailsForm(props: { d: Dashboard; forming: boolean; onSaved: () => voi
         name: name().trim(), description: c.description, instructions: note().trim() || null, startDate: start(),
         accountTitle: title().trim(), accountNumber: number, receiveLimitPaisa: limit(recv()), sendLimitPaisa: limit(send())
       });
+      if (cutoff() && cutoff() !== untrack(() => props.d.cutoff)) await setDailyCutoff(c.id, cutoff());
       setState("saved");
       props.onSaved();
     } catch (err) {
@@ -188,6 +190,9 @@ function DetailsForm(props: { d: Dashboard; forming: boolean; onSaved: () => voi
         </Field>
         <Field label={t("create.acctTitle")}>
           <input class={inputClass} value={title()} maxlength="80" onInput={e => { setTitle(e.currentTarget.value); touched(); }} />
+        </Field>
+        <Field label={t("g.s.cutoff")} hint={t("g.s.cutoffHint", { time: timeOfDay(cutoff() || "21:00") })}>
+          <input class={inputClass} type="time" step="900" value={cutoff()} onInput={e => { setCutoff(e.currentTarget.value); touched(); }} />
         </Field>
         <Field label={t("create.note")}>
           <textarea class={[inputClass, "h-24 py-3 text-base"]} value={note()} maxlength="2000" onInput={e => { setNote(e.currentTarget.value); touched(); }} />

@@ -55,7 +55,7 @@ Cloudflare **Workers with static assets** (`wrangler.jsonc`); static requests ar
 - Cloudflare dashboard → **Workers & Pages → Create → Import a repository** → `shabirkhan-dev/bari`. Build command `npm run build`, deploy command `npx wrangler deploy`. Every push to `main` then deploys.
 - `wrangler.jsonc` claims `bari.rabtx.dev` as a custom domain, and Cloudflare creates the DNS record itself. **Don't add a DNS record for it by hand**, or the deploy fails with a conflict.
 - `.env.production` is committed on purpose: the URL and publishable key are public (they're in the browser bundle); RLS protects the data.
-- `public/_headers` sets a strict Content-Security-Policy (only this site, Supabase and Google Fonts). When adding a new outside service (e.g. OCR), add it there first.
+- `public/_headers` sets a strict Content-Security-Policy (only this site and Supabase). Fonts and the OCR engine are self-hosted, so nothing else is loaded. When adding a new outside service, add it there first.
 - Unknown paths fall back to the app (`not_found_handling: single-page-application`), so invite links like `/join/ABCD2345` work.
 
 ## Nightly backup
@@ -87,19 +87,32 @@ Receipt images live in Supabase Storage and are **not** in this backup yet (see 
 npm test                         # unit tests (money, dates, schedules, receipt parser, errors)
 TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres npm test   # + database suite
 npm run test:e2e                 # end-to-end: production build in mobile Chrome, Supabase mocked
+SHOTS=1 npx playwright test shots   # screenshots of the Figma screens, light/dark × English/Urdu, into test-results/shots
 ```
 
 - **Database suite** (`tests/db`): runs every migration on a throwaway Postgres with a Supabase `auth` stand-in and plays a whole round with real users: joining, catch-up transfers, rejection, a relative paying, the toss with a member in arrears, a short payout, recipient confirmation, settings and leaving, plus RLS (outsiders see nothing; nobody writes tables directly). It also checks Postgres builds exactly the same schedule as the TypeScript.
-- **End-to-end suite** (`tests/e2e`): sign-in (English/Urdu, RTL), home, notifications, creating a committee (exact request), paying with **on-device OCR of a rendered receipt**, recording for a member, review, **JazzCash share target through the service worker**, toss draw with verification, payout, settings, activity.
+- **End-to-end suite** (`tests/e2e`): welcome (English/Urdu, RTL), home (pot, what's owed, switcher, hidden amounts), ledger (filter), slide to submit / approve / toss (keyboard and drag), receipt checks, notifications, creating a committee (exact request), paying with **on-device OCR of a rendered receipt**, recording for a member, review, **JazzCash share target through the service worker**, toss draw with verification, payout, settings, activity.
 - CI (`.github/workflows/test.yml`) runs typecheck, unit, database and end-to-end tests on every push and pull request.
 
 ## Screens and states (for design)
 
+Built from the Figma file (glass design, `src/ui/glass.tsx`, `src/screens/g/`):
+
+| Route | Screen | Notes |
+|---|---|---|
+| `/` signed out | Welcome | Google sign-in; "Join with an invite code" asks for the code, then signs in |
+| `/` | Home | running committee picked in the switcher (remembered per phone); falls back to the committee list when none is running |
+| `/ledger` | Ledger | paid / still to pay per round (no fines: late money is settled in the family), searchable history |
+| `/toss` | Toss | who's in the draw; organizer slides to toss on toss day; payout details stay on `/c/:id/round/:n` |
+| `/c/:id/pay` | Pay today | oldest unpaid days first (1 / 3 / 7 adapts to what's owed); receipt read on the phone |
+| `/c/:id/review/:sid` | Receipt check | checks: amount read off the receipt, receipt says successful, TID present (unique by rule) |
+
+Still in the earlier look until their Figma frames exist:
+
 | Route | Screen | States to design |
 |---|---|---|
-| `/` signed out | Sign in | default, opening Google, error · English/Urdu |
 | first sign-in | One quick step | empty, filled, validation error |
-| `/` | Home | committees list, nothing due ("all paid up"), due + late, empty (no committees), loading |
+| `/` (nothing running) | Committee list | nothing due ("all paid up"), due + late, empty (no committees), loading |
 | `/inbox` | Notifications | unread/read, empty |
 | `/new` | New committee | daily/weekly/monthly/custom, live summary, validation errors |
 | `/join`, `/join/CODE` | Join | empty, code filled, wrong/expired code, full |
@@ -116,14 +129,15 @@ npm run test:e2e                 # end-to-end: production build in mobile Chrome
 
 ## Status
 
-- [x] Schema, RLS, transactional money rules, 44 database + unit tests
+- [x] Schema, RLS, transactional money rules, 46 database + unit tests
 - [x] Supabase + Google sign-in, live at https://bari.rabtx.dev
 - [x] Committees: create, invite, join, start, settings, co-organizers, leave/remove (before start), activity log
 - [x] Payments: pick days, receipt with on-device OCR, Android share target, record for a member, organizer review
 - [x] Toss (in-app verifiable draw or in-person record), payout, recipient confirmation or dispute
 - [x] Notifications, WhatsApp reminders, JazzCash monthly-limit warnings, English/Urdu, light/dark
 - [x] Nightly encrypted backup with restore check; CI on every push
-- [ ] Visual design pass from Figma
+- [x] Figma design: Welcome, Home, Pay today, Ledger, Toss, Receipt check (light/dark, English/Urdu)
+- [ ] Figma design for the remaining screens (members, settings, rounds, notifications, profile, create/join)
 - [ ] Push notifications (in-app only for now)
 - [ ] Receipt images in the backup
 

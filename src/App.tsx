@@ -1,8 +1,10 @@
-import { createMemo, createSignal, Errored, Loading, Match, onSettled, refresh, Show, Switch } from "solid-js";
+import { createMemo, createRenderEffect, createSignal, Errored, Loading, Match, onSettled, refresh, Show, Switch } from "solid-js";
 import { fetchProfile, session, type Profile } from "./lib/auth";
 import { describeError } from "./lib/errors";
 import { match, navigate, path, takeRememberedPath } from "./lib/router";
-import { CompleteProfile, Login, Splash } from "./ui/SignIn";
+import { CompleteProfile, Splash } from "./ui/SignIn";
+import { Welcome } from "./ui/Welcome";
+import { setMeName } from "./ui/glass";
 import { ActionRow, Dock, Sheet } from "./ui/kit";
 import { IconKey, IconPlus } from "./ui/icons";
 import { t } from "./i18n";
@@ -17,6 +19,12 @@ import { Share } from "./screens/Share";
 import { Settings } from "./screens/Settings";
 import { Activity } from "./screens/Activity";
 import { Round } from "./screens/Round";
+import { WithCommittee } from "./screens/g/common";
+import { HomeG } from "./screens/g/HomeG";
+import { LedgerG } from "./screens/g/LedgerG";
+import { TossG } from "./screens/g/TossG";
+import { PayToday } from "./screens/g/PayToday";
+import { ReceiptG } from "./screens/g/ReceiptG";
 import { Inbox } from "./screens/Inbox";
 
 export default function App() {
@@ -27,7 +35,7 @@ export default function App() {
           <Splash />
         </Match>
         <Match when={session() === null}>
-          <Login />
+          <Welcome />
         </Match>
         <Match when={session()}>{s => <SignedIn userId={s().user.id} />}</Match>
       </Switch>
@@ -53,28 +61,48 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
     if (p && p !== location.pathname) navigate(p, { replace: true, direction: "none" });
   });
 
-  const isTab = () => path() === "/" || path() === "/me";
-  const [adding, setAdding] = createSignal(false);
-  const go = (to: string) => { setAdding(false); navigate(to); };
+  createRenderEffect(() => props.me.display_name, n => { setMeName(n); });
+  // The older list Home (with its dock) shows while no committee is running.
+  const legacyHome = () => <><Home me={props.me} /><OldDock /></>;
   return (
     <>
       <Switch fallback={<Home me={props.me} />}>
-        <Match when={path() === "/"}><Home me={props.me} /></Match>
+        <Match when={path() === "/"}>
+          <WithCommittee fallback={legacyHome()}>{(id, items) => <HomeG id={id} items={items} />}</WithCommittee>
+        </Match>
+        <Match when={path() === "/ledger"}>
+          <WithCommittee title={t("g.l.title")} fallback={legacyHome()}>{id => <LedgerG id={id} />}</WithCommittee>
+        </Match>
+        <Match when={path() === "/toss"}>
+          <WithCommittee title={t("g.t.title")} fallback={legacyHome()}>{id => <TossG id={id} />}</WithCommittee>
+        </Match>
         <Match when={path() === "/me"}><Me me={props.me} onSaved={props.onProfileSaved} /></Match>
         <Match when={path() === "/new"}><CreateCommittee me={props.me} /></Match>
         <Match when={match("/join/:code", path())}>{p => <Join code={p().code ?? ""} />}</Match>
         <Match when={path() === "/join"}><Join /></Match>
         <Match when={match("/c/:id", path())}>{p => <Committee id={p().id ?? ""} />}</Match>
-        <Match when={match("/c/:id/pay", path())}>{p => <Pay id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/pay", path())}>{p => <PayToday id={p().id ?? ""} me={props.me} />}</Match>
         <Match when={match("/c/:id/pay/:member", path())}>{p => <Pay id={p().id ?? ""} memberId={p().member ?? ""} />}</Match>
         <Match when={match("/c/:id/settings", path())}>{p => <Settings id={p().id ?? ""} />}</Match>
         <Match when={match("/c/:id/activity", path())}>{p => <Activity id={p().id ?? ""} />}</Match>
         <Match when={match("/c/:id/round/:n", path())}>{p => <Round id={p().id ?? ""} n={Number(p().n)} />}</Match>
         <Match when={path() === "/inbox"}><Inbox /></Match>
         <Match when={match("/c/:id/review", path())}>{p => <Review id={p().id ?? ""} />}</Match>
+        <Match when={match("/c/:id/review/:sid", path())}>{p => <ReceiptG id={p().id ?? ""} sid={p().sid ?? ""} />}</Match>
         <Match when={path() === "/share"}><Share /></Match>
       </Switch>
-      <Show when={isTab()}><Dock onAdd={() => setAdding(true)} /></Show>
+      <Show when={path() === "/me"}><OldDock /></Show>
+    </>
+  );
+}
+
+/** Home/Profile dock and the "new or join" sheet, for the screens not yet redesigned. */
+function OldDock() {
+  const [adding, setAdding] = createSignal(false);
+  const go = (to: string) => { setAdding(false); navigate(to); };
+  return (
+    <>
+      <Dock onAdd={() => setAdding(true)} />
       <Sheet open={adding()} onClose={() => setAdding(false)} label={t("tabs.add")}>
         <div class="flex flex-col gap-1">
           <ActionRow icon={<IconPlus />} title={t("sheet.new")} sub={t("sheet.newSub")} onClick={() => go("/new")} />

@@ -16,7 +16,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       injectManifest: {
-        globPatterns: ["**/*.{js,css,html,svg,png,webmanifest}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2}"],
         // The OCR engine (15 MB) downloads only when someone attaches a receipt.
         globIgnores: ["ocr/**"],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024

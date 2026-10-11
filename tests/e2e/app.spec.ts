@@ -5,21 +5,53 @@ test.describe("sign-in", () => {
     await setup(page, { signedIn: false });
     await page.goto("/");
     await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
-    await page.getByRole("button", { name: "اردو" }).click();
+    await expect(page.getByText("Save together,")).toBeVisible();
+    await page.getByRole("radio", { name: "اردو" }).click();
     await expect(page.getByRole("button", { name: "گوگل کے ساتھ جاری رکھیں" })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   });
 });
 
 test.describe("home", () => {
-  test("leads with today's total and lists committees", async ({ page }) => {
+  test("shows the running committee: pot, what's owed, receipts to check, next toss", async ({ page }) => {
     await setup(page);
     await page.goto("/");
-    await expect(page.getByText("Due today")).toBeVisible();
-    await expect(page.getByText("Plus Rs 400 from earlier days")).toBeVisible();
-    await expect(page.getByText("Family committee")).toBeVisible();
-    await expect(page.getByText("3 of 8 joined")).toBeVisible();
+    await expect(page.getByText("Pot this round")).toBeVisible();
+    await expect(page.getByText("3 days still to pay")).toBeVisible(); // two missed + today
+    await expect(page.getByRole("link", { name: /Pay Rs 600 now/ })).toHaveAttribute("href", "/c/c1/pay");
+    await expect(page.getByText("1 receipt to check")).toBeVisible();
+    await expect(page.getByText(/Next toss/)).toBeVisible();
     await expect(page.getByRole("link", { name: "Notifications (2)" })).toBeVisible();
+    // Hide amounts
+    await page.getByRole("button", { name: "Hide amounts" }).click();
+    await expect(page.getByRole("button", { name: "Show amounts" })).toBeVisible();
+    // Switcher lists the forming committee too
+    await page.getByRole("button", { name: /Your committees/ }).click();
+    await expect(page.getByRole("dialog").getByText("Still forming · 3/8")).toBeVisible();
+  });
+
+  test("with no running committee, lists committees", async ({ page }) => {
+    const state = makeState();
+    state.home = state.home.filter(h => h.status === "forming");
+    await setup(page, { state });
+    await page.goto("/");
+    await expect(page.getByText("Office friends")).toBeVisible();
+    await expect(page.getByText("3 of 8 joined")).toBeVisible();
+  });
+
+  test("ledger: paid and still to pay for the round, searchable history", async ({ page }) => {
+    await setup(page);
+    await page.goto("/ledger");
+    await expect(page.getByText("You paid in")).toBeVisible();
+    await expect(page.getByText("Rs 1,400.00", { exact: true })).toBeVisible();
+    await expect(page.getByText("Still to pay")).toBeVisible();
+    await expect(page.getByText("Day 7 · You")).toBeVisible();
+    await expect(page.getByText("Days 1–6 · You")).toBeVisible();
+    await page.getByRole("button", { name: "Filter: All" }).click(); // → pending only
+    await expect(page.getByText("Days 1–6 · You")).toHaveCount(0);
+    await page.getByRole("button", { name: "Filter: Pending" }).click(); // → verified only
+    await expect(page.getByText("Day 7 · You")).toHaveCount(0);
+    await expect(page.getByText("Days 1–6 · You")).toBeVisible();
   });
 
   test("notifications read as sentences and get marked read", async ({ page }) => {
@@ -61,19 +93,25 @@ test.describe("committee", () => {
 });
 
 test.describe("payments", () => {
-  test("pay: missed days preselected, OCR reads the receipt, exact submission", async ({ page }) => {
+  test("pay: oldest days first, OCR reads the receipt, slide to submit", async ({ page }) => {
     const receipt = await renderReceipt(page, "731900426615", "600.00");
     const { rpcCalls, calls } = await setup(page);
     await page.goto("/c/c1/pay");
-    await expect(page.locator('button[aria-pressed="true"]')).toHaveCount(3); // two missed + today
+    await expect(page.getByRole("radio", { name: "3 days" })).toHaveAttribute("aria-checked", "true"); // two missed + today
+    await expect(page.getByText("Send Rs 600 to Shabir")).toBeVisible();
+    await expect(page.getByText("Days 8–10 · Family committee")).toBeVisible();
+    // Sliding without a receipt or TID asks for one
+    await page.getByRole("button", { name: "Slide to submit" }).press("Enter");
+    await expect(page.getByText("Attach the receipt or type the TID to submit.")).toBeVisible();
     await page.locator('input[type="file"]').setInputFiles({ name: "r.png", mimeType: "image/png", buffer: receipt });
-    await expect(page.locator('input[inputmode="numeric"][dir="ltr"]')).toHaveValue("731900426615", { timeout: 45_000 });
+    await expect(page.getByText("TID 7319 0042 6615")).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText("Receipt amount matches")).toBeVisible();
-    await page.getByRole("button", { name: "Send for checking" }).click();
+    await page.getByRole("button", { name: "Slide to submit" }).press("Enter");
     await expect(page.getByText("Sent for checking")).toBeVisible();
     expect(rpcCalls("submit_payment")[0]!.body).toMatchObject({
-      p_member_id: "m0", p_obligation_ids: ["o0", "o1", "o2"], p_amount_paisa: 60000, p_tid: "731900426615"
+      p_member_id: "m0", p_obligation_ids: ["d7", "d8", "d9"], p_amount_paisa: 60000, p_tid: "731900426615"
     });
+    expect(rpcCalls("record_receipt_reading")[0]!.body).toEqual({ p_submission_id: "sub-123", p_amount_paisa: 60000, p_successful: true });
     expect(calls.some(c => c.path.startsWith("/storage/v1/object/receipts/c1/sub-123/"))).toBe(true);
     expect(rpcCalls("attach_receipt")[0]!.body.p_sha256).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -103,6 +141,30 @@ test.describe("payments", () => {
     expect(rpcCalls("verify_submission")[0]!.body).toEqual({ p_submission_id: "s1", p_confirmed_amount_paisa: 20000 });
   });
 
+  test("receipt check: the three checks, then drag to approve", async ({ page }) => {
+    const { rpcCalls } = await setup(page);
+    await page.goto("/c/c1/review/s1");
+    await expect(page.getByRole("heading", { name: "Sumera Khan" })).toBeVisible();
+    await expect(page.getByText("Day 10 of 30")).toBeVisible();
+    await expect(page.getByText("All 3 checks passed")).toBeVisible();
+    await expect(page.getByText("7267 5508 6850")).toBeVisible();
+    const slider = page.getByRole("button", { name: "Slide to approve" });
+    const box = (await slider.boundingBox())!;
+    await page.mouse.move(box.x + 30, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up(); // released halfway: nothing happens
+    expect(rpcCalls("verify_submission")).toHaveLength(0);
+    await page.waitForTimeout(400); // the knob springs back
+    await page.mouse.move(box.x + 30, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 10, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => rpcCalls("verify_submission").length).toBe(1);
+    expect(rpcCalls("verify_submission")[0]!.body).toEqual({ p_submission_id: "s1", p_confirmed_amount_paisa: 20000 });
+    await expect(page).toHaveURL(/\/c\/c1\/review$/);
+  });
+
   test("share from JazzCash lands on the payment screen with the receipt read", async ({ page }) => {
     const receipt = await renderReceipt(page, "880011223344", "200.00");
     const state = makeState();
@@ -119,7 +181,7 @@ test.describe("payments", () => {
     expect(status).toBe("opaqueredirect");
     await page.goto("/share");
     await expect(page).toHaveURL(/\/c\/c1\/pay$/);
-    await expect(page.locator('input[inputmode="numeric"][dir="ltr"]')).toHaveValue("880011223344", { timeout: 45_000 });
+    await expect(page.getByText("TID 8800 1122 3344")).toBeVisible({ timeout: 45_000 });
   });
 });
 
@@ -142,6 +204,27 @@ test.describe("toss and payout", () => {
     expect(rpcCalls("record_payout")[0]!.body).toMatchObject({ p_payout_round_id: "pr1", p_amount_paisa: 3000000, p_paid_at: `${TODAY}T12:00:00+05:00` });
   });
 
+  test("toss tab: who's in, slide to toss on toss day", async ({ page }) => {
+    const state = makeState();
+    state.dashboard.rounds[0]!.toss_date = TODAY;
+    const { rpcCalls } = await setup(page, { state });
+    await page.goto("/toss");
+    await expect(page.getByText("3 members still in the draw")).toBeVisible();
+    await expect(page.getByText("2 sitting out: payment not verified")).toBeVisible();
+    await page.getByRole("button", { name: "Slide to toss" }).press("Enter");
+    await expect.poll(() => rpcCalls("draw_toss").length).toBe(1);
+    expect(rpcCalls("draw_toss")[0]!.body).toMatchObject({ p_round: 1, p_method: "app" });
+    await expect(page.getByText("Sumera Khan")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Payout details/ })).toHaveAttribute("href", "/c/c1/round/1");
+  });
+
+  test("toss tab before toss day: no slider", async ({ page }) => {
+    await setup(page);
+    await page.goto("/toss");
+    await expect(page.getByText(/Toss on/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Slide to toss" })).toHaveCount(0);
+  });
+
   test("the toss can't be drawn before toss day", async ({ page }) => {
     await setup(page);
     await page.goto("/c/c1/round/1");
@@ -161,9 +244,12 @@ test.describe("settings", () => {
 
     await expect(page.getByLabel("First payment date")).toBeDisabled(); // running: schedule locked
     await page.getByLabel("Can receive per month").fill("300000");
+    await page.getByLabel("Daily cutoff").fill("22:30");
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect.poll(() => rpcCalls("update_committee").length).toBe(1);
     expect(rpcCalls("update_committee")[0]!.body).toMatchObject({ p_committee_id: "c1", p_monthly_receive_limit_paisa: 30000000 });
+    await expect.poll(() => rpcCalls("set_daily_cutoff").length).toBe(1);
+    expect(rpcCalls("set_daily_cutoff")[0]!.body).toEqual({ p_committee_id: "c1", p_cutoff: "22:30" });
   });
 
   test("activity reads as plain sentences", async ({ page }) => {
@@ -180,6 +266,14 @@ test.describe("urdu", () => {
     await page.goto("/c/c1");
     await expect(page.getByRole("button", { name: "میں نے ادائیگی کر دی" })).toBeVisible();
     await expect(page.getByText("600 روپے باقی")).toBeVisible();
+  });
+
+  test("home in Urdu, right to left", async ({ page }) => {
+    await setup(page, { lang: "ur" });
+    await page.goto("/");
+    await expect(page.getByText("اس راؤنڈ کی کمیٹی")).toBeVisible();
+    await expect(page.getByRole("link", { name: /ابھی 600 روپے ادا کریں/ })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   });
 });
 
