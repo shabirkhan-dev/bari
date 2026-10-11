@@ -344,4 +344,80 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect(actions).toEqual(expect.arrayContaining(["committee.created", "payment.verified", "payment.rejected", "toss.drawn", "payout.recorded", "payout.confirmed"]));
     await expect(as("owner", "update audit_events set action = 'x'")).rejects.toThrow(/permission denied/);
   });
+  it("shows each member's days this round and the organizer's decided receipts", async () => {
+    const mr = await rpc("m3", "members_round", [committeeId]);
+    expect(mr.members).toHaveLength(5);
+    expect(mr.members[0].days.length).toBeGreaterThan(0);
+    expect(mr.members[0].days[0]).toHaveProperty("s");
+    await expect(rpc("outsider", "members_round", [committeeId])).rejects.toThrow(/Not a member/);
+    const hist = await rpc("owner", "review_history", [committeeId, 50]);
+    expect(hist.map((h: any) => h.status)).toEqual(expect.arrayContaining(["verified", "rejected"]));
+    expect(hist[0].decided_by_name).toBeTruthy();
+    expect(await rpc("m3", "review_history", [committeeId, 50])).toEqual([]); // organizers only
+  });
+
+  describe("late fines, invite preview and push jobs", () => {
+    let fc: string;
+    let code: string;
+    const asService = async (sql: string) => {
+      await db.query("begin");
+      try {
+        await db.query("set local role service_role");
+        const r = await db.query(sql);
+        await db.query("commit");
+        return r;
+      } catch (e) { await db.query("rollback"); throw e; }
+    };
+
+    it("previews an invitation before joining", async () => {
+      await setToday("2026-09-01");
+      // 2 members × 2 days × Rs 200 = Rs 800 per round
+      fc = await rpc("owner", "create_committee", ["Fines", null, 2, 20000, "daily", null, 2, "2026-09-02",
+        80000, "Owner", "03001234567", null, null, null, null]);
+      await rpc("owner", "set_late_fine", [fc, 5000]);
+      code = await rpc("owner", "create_invitation", [fc, 72]);
+      const p = await rpc("m3", "invitation_preview", [code]);
+      expect(p).toMatchObject({ name: "Fines", contribution_paisa: 20000, member_count: 2, payout_paisa: 80000,
+        late_fine_paisa: 5000, cutoff: "21:00", already_member: false, organizer: "owner" });
+      expect(p.members).toHaveLength(1);
+      await expect(rpc("m3", "invitation_preview", ["NOPE2345"])).rejects.toThrow(/invalid or expired/);
+      await expect(rpc("m3", "set_late_fine", [fc, 100])).rejects.toThrow();
+      await rpc("m3", "join_committee", [code]);
+      expect((await rpc("m3", "invitation_preview", [code])).already_member).toBe(true);
+      await rpc("owner", "activate_committee", [fc]);
+      await expect(rpc("owner", "set_late_fine", [fc, 100])).rejects.toThrow(/locked/);
+    });
+
+    it("counts a day late when nothing was sent by the cutoff, and lets the organizer settle it", async () => {
+      await setToday("2026-09-06"); // every deadline has passed (they're in the real past)
+      const l = await rpc("m3", "my_ledger_v2", [fc]);
+      expect(l.late_fine_paisa).toBe(5000);
+      expect(l.fines).toHaveLength(4);
+      expect(l.streak).toBe(0);
+      const mid = (await as("m3", "select id from committee_members where committee_id = $1 and user_id = auth.uid()", [fc])).rows[0].id;
+      expect((await rpc("owner", "committee_dashboard_v4", [fc])).fines[mid]).toBe(20000);
+      await expect(rpc("m3", "settle_fine", [l.fines[0].obligation_id, "waived"])).rejects.toThrow(/organizers/);
+      await rpc("owner", "settle_fine", [l.fines[0].obligation_id, "waived"]);
+      expect((await rpc("owner", "committee_dashboard_v4", [fc])).fines[mid]).toBe(15000);
+      const own = (await rpc("owner", "my_ledger_v2", [fc])).fines[0].obligation_id;
+      await expect(rpc("owner", "settle_fine", [own, "paid"])).rejects.toThrow(/Someone else/);
+    });
+
+    it("hands the worker reminders, fine notices and subscriptions once; nobody else can", async () => {
+      await rpc("m3", "set_reminder", [true, "00:00", "ur"]);
+      await rpc("m3", "save_push_subscription", ["https://push.example/abc", "key", "auth"]);
+      expect(await rpc("m3", "my_settings", [])).toMatchObject({ reminder_on: true, reminder_time: "00:00", lang: "ur", push_devices: 1 });
+      await expect(rpc("m3", "push_jobs", [])).rejects.toThrow(/permission denied/);
+      const jobs = (await asService("select public.push_jobs() as v")).rows[0].v;
+      const kinds = jobs.notifications.filter((n: any) => n.user_id === users.m3).map((n: any) => n.kind);
+      expect(kinds).toContain("payment.due");
+      expect(kinds.filter((k: string) => k === "fine.added")).toHaveLength(3); // the waived day isn't announced
+      expect(jobs.notifications.find((n: any) => n.kind === "payment.due").lang).toBe("ur");
+      expect(jobs.subscriptions).toEqual([{ user_id: users.m3, endpoint: "https://push.example/abc", p256dh: "key", auth: "auth" }]);
+      const again = (await asService("select public.push_jobs() as v")).rows[0].v;
+      expect(again.notifications).toEqual([]);
+      await asService("select public.push_gone(array['https://push.example/abc'])");
+      expect((await rpc("m3", "my_settings", [])).push_devices).toBe(0);
+    });
+  });
 });
