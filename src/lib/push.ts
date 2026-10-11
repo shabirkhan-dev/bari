@@ -1,4 +1,5 @@
 import { removePushSubscription, savePushSubscription } from "./api";
+import { supabase } from "./supabase";
 
 /** Web Push on this phone: ask permission, subscribe with the server's VAPID key, save it. */
 export type PushState = "unsupported" | "denied" | "off" | "on";
@@ -22,9 +23,8 @@ const fromB64url = (s: string) => {
 /** Throws "push-unavailable" when the server has no key yet, "denied" when the user says no. */
 export async function enablePush(): Promise<void> {
   if (!pushSupported()) throw new Error("unsupported");
-  const res = await fetch("/api/push/key", { cache: "no-store" }).catch(() => null);
-  const key = res?.ok ? ((await res.json().catch(() => ({}))) as { key?: string | null }).key : null;
-  if (!key) throw new Error("push-unavailable");
+  const { data: key } = await supabase.rpc("push_public_key");
+  if (typeof key !== "string" || !key) throw new Error("push-unavailable");
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error("denied");
   const reg = await navigator.serviceWorker.ready;

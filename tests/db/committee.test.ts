@@ -424,6 +424,13 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
       const again = (await asService("select public.push_jobs() as v")).rows[0].v;
       expect(again.notifications).toEqual([]);
       await asService("select public.push_gone(array['https://push.example/abc'])");
+      // VAPID keys: made once by the worker; only the public half reaches the app.
+      expect(await rpc("m3", "push_public_key", [])).toBeNull();
+      await asService("select public.save_push_vapid('PUB1', 'PRIV1')");
+      await asService("select public.save_push_vapid('PUB2', 'PRIV2')"); // a racing second run keeps the first
+      expect(await rpc("m3", "push_public_key", [])).toBe("PUB1");
+      await expect(rpc("m3", "push_vapid", [])).rejects.toThrow(/permission denied/);
+      await expect(as("m3", "select * from push_config")).rejects.toThrow(/permission denied/);
       expect((await rpc("m3", "my_settings", [])).push_devices).toBe(0);
     });
   });

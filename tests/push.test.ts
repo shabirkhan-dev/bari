@@ -18,7 +18,22 @@ async function keys() {
 describe("push worker", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("does nothing until the secrets are set", async () => {
+  it("makes a key pair once and stores it when none exists", async () => {
+    const saved: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/rpc/push_vapid")) return new Response("null");
+      if (url.endsWith("/rpc/save_push_vapid")) { const b = JSON.parse(init.body as string); saved.push(b); return new Response(JSON.stringify({ public_key: b.p_public, private_key: b.p_private })); }
+      if (url.endsWith("/rpc/push_jobs")) return new Response(JSON.stringify({ notifications: [], subscriptions: [] }));
+      return new Response(null, { status: 204 });
+    }));
+    expect(await runPushJobs({ SUPABASE_URL: "https://x.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", ASSETS: { fetch: vi.fn() } })).toEqual({ sent: 0, gone: 0 });
+    expect(saved).toHaveLength(1);
+    const k = saved[0] as { p_public: string; p_private: string };
+    expect(Buffer.from(k.p_public, "base64url")).toHaveLength(65); // uncompressed P-256 point
+    expect(Buffer.from(k.p_private, "base64url")).toHaveLength(32);
+  });
+
+  it("does nothing until the secret is set", async () => {
     const f = vi.fn();
     vi.stubGlobal("fetch", f);
     expect(await runPushJobs({ SUPABASE_URL: "https://x.supabase.co", ASSETS: { fetch: f } })).toEqual({ sent: 0, gone: 0 });

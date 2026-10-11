@@ -76,12 +76,15 @@ Receipt images live in Supabase Storage and are **not** in this backup yet (see 
 
 ## Push notifications (daily reminder, payment checked, toss, fines)
 
-The Worker in `worker/index.ts` serves the app and, every 5 minutes (Cron Trigger in `wrangler.jsonc`), asks Supabase (`push_jobs()`) for due reminders, "late fine added" notices and new in-app notifications, then sends them as Web Push. Until its three secrets are set it does nothing, and the reminder switch says reminders aren't on yet.
+The Worker in `worker/index.ts` serves the app and, every 5 minutes (Cron Trigger in `wrangler.jsonc`), asks Supabase (`push_jobs()`) for due reminders, "late fine added" notices and new in-app notifications, then sends them as Web Push. On its first run it creates the Web Push (VAPID) key pair and stores it in the database (`push_config`, service role only).
 
-1. On your computer: `node scripts/vapid-keys.mjs` prints `VAPID_PUBLIC_KEY=…` and `VAPID_PRIVATE_KEY=…`.
-2. Cloudflare → Workers & Pages → **bari** → Settings → Variables and Secrets → add three **Secrets** (type "Secret", not "Text"):
-   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `SUPABASE_SECRET_KEY` (Supabase → Project Settings → API Keys → a **secret** key `sb_secret_…`).
-3. Redeploy (or push any commit). Never paste these into chat, the repo or `.env.production`.
+It needs **one secret**, set once in Cloudflare → Workers & Pages → **bari** → Settings → Variables and Secrets → Add → type **Secret**:
+
+| Name | Value |
+|---|---|
+| `SUPABASE_SECRET_KEY` | Supabase → Project Settings → API Keys → a **secret** key (`sb_secret_…`) |
+
+Never paste it into chat, the repo or `.env.production`. Until it is set, the reminder switch says reminders aren't on yet. (Optional: `node scripts/vapid-keys.mjs` makes your own VAPID pair to set as `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` secrets instead.)
 
 ## Environment variables
 
