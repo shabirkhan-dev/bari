@@ -10,6 +10,7 @@ import { todayInPKT } from "../../domain/dates";
 import { clock, money, t } from "../../i18n";
 import { firstName, GIcon, GMoney, GNote, GScreen, GSegmented, GSheet, GSkeleton, Halo, SlideToConfirm, WideHalo } from "../../ui/glass";
 import { tick, useCopy } from "../../ui/kit";
+import { Check } from "../../ui/pickers";
 import { groupedTid, periodOf, periodsLabel, spacedPhone, unitCount } from "./common";
 
 export function PayToday(props: { id: string; me: Profile }) {
@@ -226,10 +227,10 @@ function PayForm(props: { d: Dashboard; items: Payable[]; l: LedgerV2; me: Profi
               <Show when={!receipt() && !typeTid()} fallback={<span />}>
                 <button type="button" class="min-h-9 underline underline-offset-4" onClick={() => { tick(); setTypeTid(true); }}>{t("pay.tid")}</button>
               </Show>
-              <label class="flex min-h-9 items-center gap-2">
-                <input type="checkbox" class="h-4 w-4 accent-[var(--g-emerald)]" checked={someoneElse()} onChange={e => setSomeoneElse(e.currentTarget.checked)} />
-                <span>{t("pay.someoneElse")}</span>
-              </label>
+              <span class="flex min-h-9 items-center gap-2">
+                <Check checked={someoneElse()} onChange={setSomeoneElse} label={t("pay.someoneElse")} />
+                <span aria-hidden="true" onClick={() => setSomeoneElse(!someoneElse())}>{t("pay.someoneElse")}</span>
+              </span>
             </div>
             <Show when={typeTid() || ocr() === "failed" || (ocr() === "idle" && !!receipt())}>
               <label class="mt-2 block">

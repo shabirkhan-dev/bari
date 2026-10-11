@@ -1,9 +1,5 @@
 import { render } from "@solidjs/web";
 // Fonts are self-hosted (precached by the service worker, so they work offline).
-import "@fontsource/outfit/latin-400.css";
-import "@fontsource/outfit/latin-500.css";
-import "@fontsource/outfit/latin-600.css";
-import "@fontsource/outfit/latin-700.css";
 import "@fontsource/manrope/latin-400.css";
 import "@fontsource/manrope/latin-500.css";
 import "@fontsource/manrope/latin-600.css";

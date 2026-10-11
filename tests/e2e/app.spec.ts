@@ -365,7 +365,12 @@ test.describe("settings", () => {
 
     await expect(page.getByLabel("First payment date")).toBeDisabled(); // running: schedule locked
     await page.getByLabel("Can receive per month").fill("300000");
-    await page.getByLabel("Daily cutoff").fill("22:30");
+    await page.getByRole("button", { name: /^Daily cutoff/ }).click();
+    const picker = page.getByRole("dialog");
+    await picker.getByRole("radio", { name: "10", exact: true }).click();
+    await picker.getByRole("radio", { name: ":30" }).click();
+    await picker.getByRole("radio", { name: "pm" }).click();
+    await picker.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect.poll(() => rpcCalls("update_committee").length).toBe(1);
     expect(rpcCalls("update_committee")[0]!.body).toMatchObject({ p_committee_id: "c1", p_monthly_receive_limit_paisa: 30000000 });

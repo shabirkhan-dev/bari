@@ -4,6 +4,7 @@ import {
   type Dashboard, type DashboardRound, type PayoutRound
 } from "../lib/api";
 import { describeError } from "../lib/errors";
+import { DateField } from "../ui/pickers";
 import { freshness } from "../lib/live";
 import { todayInPKT } from "../domain/dates";
 import { rupees } from "../domain/money";
@@ -222,7 +223,7 @@ function PayoutForm(props: { d: Dashboard; r: DashboardRound; p: PayoutRound; on
           <input class={[inputClass, "num"]} inputmode="numeric" dir="ltr" value={tid()} onInput={e => setTid(e.currentTarget.value.replace(/\D/g, "").slice(0, 20))} />
         </Field>
         <Field label={t("round.paidOn")}>
-          <input class={inputClass} type="date" max={todayInPKT()} value={date()} onInput={e => setDate(e.currentTarget.value)} />
+          <DateField value={date()} max={todayInPKT()} label={t("round.paidOn")} onChange={setDate} />
         </Field>
         <Show when={error()}><ErrorNote message={error()} /></Show>
         <Button type="submit" disabled={busy()}>{busy() ? t("common.saving") : t("round.savePayout")}</Button>

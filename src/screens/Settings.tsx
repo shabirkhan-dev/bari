@@ -4,6 +4,7 @@ import {
   type Dashboard, type DashboardMember
 } from "../lib/api";
 import { describeError } from "../lib/errors";
+import { DateField, TimeField } from "../ui/pickers";
 import { navigate } from "../lib/router";
 import { todayInPKT } from "../domain/dates";
 import { rupees } from "../domain/money";
@@ -182,8 +183,7 @@ function DetailsForm(props: { d: Dashboard; forming: boolean; onSaved: () => voi
           <input class={inputClass} value={name()} maxlength="80" onInput={e => { setName(e.currentTarget.value); touched(); }} />
         </Field>
         <Field label={t("create.first")} hint={props.forming ? undefined : t("settings.startLocked")}>
-          <input class={inputClass} type="date" min={todayInPKT()} value={start()} disabled={!props.forming}
-            onInput={e => { setStart(e.currentTarget.value); touched(); }} />
+          <DateField value={start()} min={todayInPKT()} disabled={!props.forming} label={t("create.first")} onChange={v => { setStart(v); touched(); }} />
         </Field>
         <Field label={t("create.acct")} hint={!props.forming && accountChanged() ? t("settings.accountWarn") : normalizePkMobile(acct()) ? formatPkMobile(normalizePkMobile(acct())!) : undefined}>
           <input class={[inputClass, "tracking-wide"]} type="tel" inputmode="numeric" dir="ltr" value={acct()} onInput={e => { setAcct(e.currentTarget.value); touched(); }} />
@@ -192,7 +192,7 @@ function DetailsForm(props: { d: Dashboard; forming: boolean; onSaved: () => voi
           <input class={inputClass} value={title()} maxlength="80" onInput={e => { setTitle(e.currentTarget.value); touched(); }} />
         </Field>
         <Field label={t("g.s.cutoff")} hint={t("g.s.cutoffHint", { time: timeOfDay(cutoff() || "21:00") })}>
-          <input class={inputClass} type="time" step="900" value={cutoff()} onInput={e => { setCutoff(e.currentTarget.value); touched(); }} />
+          <TimeField value={cutoff()} label={t("g.s.cutoff")} onChange={v => { setCutoff(v); touched(); }} />
         </Field>
         <Field label={t("create.note")}>
           <textarea class={[inputClass, "h-24 py-3 text-base"]} value={note()} maxlength="2000" onInput={e => { setNote(e.currentTarget.value); touched(); }} />

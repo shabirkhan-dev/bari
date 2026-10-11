@@ -9,6 +9,7 @@ import { formatPkMobile, normalizePkMobile } from "../../domain/phone";
 import { lang, setLang, t, timeOfDay, type Lang } from "../../i18n";
 import { GAvatar, GIcon, gInput, gInputStyle, GLabel, GNote, GRow, GScreen, GSegmented, GSheet, Halo, Toggle, WideHalo } from "../../ui/glass";
 import { tick } from "../../ui/kit";
+import { TimeField } from "../../ui/pickers";
 import { maskedPhone } from "./common";
 
 export function SettingsG(props: { me: Profile; onSaved: () => void }) {
@@ -110,8 +111,7 @@ function ReminderRow(props: { s: MySettings }) {
       <Show when={note()}><p class="pb-3 text-[12px]" style={{ color: "var(--g-amber)" }}>{note()}</p></Show>
       <GSheet open={picking()} onClose={() => setPicking(false)} label={t("st.reminderTime")}>
         <h2 class="g-serif text-[24px]">{t("st.reminderTime")}</h2>
-        <input type="time" step="900" class={gInput} style={gInputStyle} value={time()} aria-label={t("st.reminderTime")}
-          onInput={e => setTime(e.currentTarget.value || "20:00")} />
+        <TimeField value={time()} label={t("st.reminderTime")} onChange={setTime} />
         <WideHalo h={60} dark disabled={busy()} onClick={() => { setPicking(false); void turn(true, time()); }}>
           <span class="text-[15px] font-medium">{t("common.save")}</span>
         </WideHalo>

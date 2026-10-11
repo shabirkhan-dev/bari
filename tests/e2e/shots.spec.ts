@@ -44,6 +44,15 @@ const screens: Record<string, Shot> = {
     await p.getByRole("button", { name: /Slide to toss|قرعہ کے لیے/ }).press("Enter");
     await p.waitForTimeout(700);
   } },
+  list: { path: "/", state: s => { s.home = s.home.map(h => ({ ...h, status: "forming", joined: h.id === "c1" ? 5 : 3, start_date: h.id === "c1" ? "2026-10-11" : h.start_date })); } },
+  running: { path: "/c/c1" },
+  round: { path: "/c/c1/round/1" },
+  csettings: { path: "/c/c1/settings" },
+  activity: { path: "/c/c1/activity" },
+  payfor: { path: "/c/c1/pay/m2" },
+  sheet: { path: "/me", member: true, act: async p => { await p.getByRole("button", { name: /Help|مدد/ }).first().click(); await p.waitForTimeout(400); } },
+  timepick: { path: "/new", act: async p => { await p.getByRole("button", { name: /^(Pay by|آخری وقت)/ }).click(); await p.waitForTimeout(400); } },
+  datepick: { path: "/c/c2", act: async p => { await p.getByRole("button", { name: /^(First payment|پہلی ادائیگی)/ }).click(); await p.waitForTimeout(400); } },
   payout: { path: "/c/c1/payout/1", state: s => { drawn(s); (s.payoutRound as Record<string, unknown>).status = "drawn"; } }
 };
 

@@ -8,10 +8,11 @@ import { rupees } from "../../domain/money";
 import { buildRounds, CommitteeConfig } from "../../domain/schedule";
 import { daysBetween } from "../../domain/display";
 import { formatPkMobile, normalizePkMobile } from "../../domain/phone";
-import { dateShort, money, t, timeOfDay } from "../../i18n";
+import { dateShort, money, t } from "../../i18n";
 import type { Key } from "../../i18n/strings";
 import { GIcon, gInput, gInputStyle, GLabel, GMoney, GNote, GScreen, GSegmented, GSheet, GStepper, Halo, SlideToConfirm, Toggle, WideHalo } from "../../ui/glass";
 import { tick } from "../../ui/kit";
+import { DateField, TimeField } from "../../ui/pickers";
 import { maskedPhone, unitCount } from "./common";
 
 type Freq = "daily" | "weekly" | "monthly";
@@ -117,11 +118,7 @@ export function NewCommitteeG(props: { me: Profile }) {
             <span class="block text-[15px]">{t("nc.payBy")}</span>
             <span class="mt-0.5 block text-[12px]" style={{ color: "var(--g-muted)" }}>{t("nc.payBySub")}</span>
           </span>
-          <label class="g-halo shrink-0" style={{ height: "48px", width: "112px" }}>
-            <span class="g-core text-[14px] font-medium">{timeOfDay(cutoff(), true)}</span>
-            <input type="time" step="900" class="absolute inset-0 cursor-pointer opacity-0" aria-label={t("nc.payBy")} value={cutoff()}
-              onInput={e => setCutoff(e.currentTarget.value || "21:00")} />
-          </label>
+          <TimeField look="halo" value={cutoff()} label={t("nc.payBy")} onChange={setCutoff} />
         </div>
       </section>
 
@@ -151,7 +148,7 @@ export function NewCommitteeG(props: { me: Profile }) {
         </div>
         <label class="block">
           <span class="mb-1.5 block text-[12px]" style={{ color: "var(--g-muted)" }}>{t("create.first")}</span>
-          <input class={gInput} style={gInputStyle} type="date" min={todayInPKT()} value={start()} onInput={e => setStart(e.currentTarget.value)} />
+          <DateField value={start()} min={todayInPKT()} label={t("create.first")} onChange={setStart} />
         </label>
         <label class="block">
           <span class="mb-1.5 block text-[12px]" style={{ color: "var(--g-muted)" }}>{t("create.acct")}</span>

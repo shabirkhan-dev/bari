@@ -1,4 +1,4 @@
-import { createMemo, createRenderEffect, createSignal, Errored, Loading, Match, onSettled, refresh, Show, Switch } from "solid-js";
+import { createMemo, createRenderEffect, Errored, Loading, Match, onSettled, refresh, Show, Switch } from "solid-js";
 import { fetchProfile, session, type Profile } from "./lib/auth";
 import { describeError } from "./lib/errors";
 import { match, navigate, path, takeRememberedPath } from "./lib/router";
@@ -6,10 +6,7 @@ import { Splash } from "./ui/SignIn";
 import { ProfileStep } from "./ui/ProfileStep";
 import { Welcome } from "./ui/Welcome";
 import { setMeName } from "./ui/glass";
-import { ActionRow, Dock, Sheet } from "./ui/kit";
-import { IconKey, IconPlus } from "./ui/icons";
 import { t } from "./i18n";
-import { Home } from "./screens/Home";
 import { Committee } from "./screens/Committee";
 import { Pay } from "./screens/Pay";
 import { Share } from "./screens/Share";
@@ -23,6 +20,7 @@ import { TossG } from "./screens/g/TossG";
 import { PayToday } from "./screens/g/PayToday";
 import { ReceiptG } from "./screens/g/ReceiptG";
 import { OrganizerHomeG } from "./screens/g/OrganizerHomeG";
+import { HomeListG } from "./screens/g/HomeListG";
 import { MembersG } from "./screens/g/MembersG";
 import { ReceiptsG } from "./screens/g/ReceiptsG";
 import { UpdatesG } from "./screens/g/UpdatesG";
@@ -67,10 +65,10 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
 
   createRenderEffect(() => props.me.display_name, n => { setMeName(n); });
   // The older list Home (with its dock) shows while no committee is running.
-  const legacyHome = () => <><Home me={props.me} /><OldDock /></>;
+  const legacyHome = () => <HomeListG />;
   return (
     <>
-      <Switch fallback={<Home me={props.me} />}>
+      <Switch fallback={<HomeListG />}>
         <Match when={path() === "/"}>
           <WithCommittee fallback={legacyHome()}>{(id, items) => (
             <Show when={items().find(i => i.id === id)?.role !== "member"} fallback={<HomeG id={id} items={items} />}>
@@ -106,23 +104,6 @@ function Shell(props: { me: Profile; onProfileSaved: () => void }) {
         <Match when={match("/c/:id/review/:sid", path())}>{p => <ReceiptG id={p().id ?? ""} sid={p().sid ?? ""} />}</Match>
         <Match when={path() === "/share"}><Share /></Match>
       </Switch>
-    </>
-  );
-}
-
-/** Home/Profile dock and the "new or join" sheet, for the screens not yet redesigned. */
-function OldDock() {
-  const [adding, setAdding] = createSignal(false);
-  const go = (to: string) => { setAdding(false); navigate(to); };
-  return (
-    <>
-      <Dock onAdd={() => setAdding(true)} />
-      <Sheet open={adding()} onClose={() => setAdding(false)} label={t("tabs.add")}>
-        <div class="flex flex-col gap-1">
-          <ActionRow icon={<IconPlus />} title={t("sheet.new")} sub={t("sheet.newSub")} onClick={() => go("/new")} />
-          <ActionRow icon={<IconKey />} title={t("sheet.join")} sub={t("sheet.joinSub")} onClick={() => go("/join")} />
-        </div>
-      </Sheet>
     </>
   );
 }

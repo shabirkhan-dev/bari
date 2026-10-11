@@ -48,6 +48,8 @@ export function back(fallback = "/") {
 
 let lastDepth = depth();
 addEventListener("popstate", () => {
+  // Same screen (e.g. a bottom sheet's history entry closing): nothing to navigate.
+  if (location.pathname === path()) { lastDepth = depth(); return; }
   const d = depth();
   const dir: Direction = d < lastDepth ? "back" : "forward";
   lastDepth = d;

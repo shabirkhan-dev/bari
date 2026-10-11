@@ -1,6 +1,7 @@
 import { createMemo, createSignal, Errored, For, Loading, Match, onSettled, Show, Switch } from "solid-js";
 import { attachReceipt, getDashboard, memberPayable, myPayable, submitPayment, type Payable } from "../lib/api";
 import { describeError } from "../lib/errors";
+import { Toggle } from "../ui/glass";
 import { navigate } from "../lib/router";
 import { prepareReceipt, readReceipt, ReceiptError, type PreparedReceipt } from "../lib/receipt";
 import { takeShared } from "../lib/shared";
@@ -199,10 +200,10 @@ function PayForm(props: { committeeId: string; memberId: string; forName?: strin
           </Card>
 
           <Card class="flex flex-col gap-4">
-            <label class="flex min-h-11 items-center justify-between gap-4">
-              <span class="text-[17px] font-medium">{t("pay.someoneElse")}</span>
-              <input type="checkbox" class="h-6 w-6 accent-[var(--brand)]" checked={someoneElse()} onChange={e => setSomeoneElse(e.currentTarget.checked)} />
-            </label>
+            <div class="flex min-h-11 items-center justify-between gap-4">
+              <span class="text-[15px] font-medium">{t("pay.someoneElse")}</span>
+              <Toggle on={someoneElse()} label={t("pay.someoneElse")} onChange={setSomeoneElse} />
+            </div>
             <Show when={someoneElse()}>
               <Field label={t("pay.paidBy")}>
                 <input class={inputClass} placeholder={t("pay.paidByPh")} value={paidBy()} onInput={e => setPaidBy(e.currentTarget.value)} maxlength="80" />

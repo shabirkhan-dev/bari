@@ -3,7 +3,8 @@
  * dashed ring + solid core), glass cards, serif money with grey decimals, gradient
  * avatars, slide-to-confirm, and the four-tab bottom bar.
  */
-import { createMemo, createSignal, For, Loading, Show } from "solid-js";
+import { createMemo, createSignal, For, Loading, onCleanup, Show } from "solid-js";
+import { openSheet } from "../lib/sheets";
 import { Portal, type JSX } from "@solidjs/web";
 import { back, navigate, path } from "../lib/router";
 import { unreadCount } from "../lib/api";
@@ -48,6 +49,7 @@ export const GIcon = {
   share: (p: IP) => svg(p.size ?? 18, <><path d="M12 15V4" /><path d="m7.5 8.5 4.5-4.5 4.5 4.5" /><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" /></>),
   phone: (p: IP) => svg(p.size ?? 18, <path d="M6.6 3.5h2.6l1.5 4-2 1.3a11 11 0 0 0 6.5 6.5l1.3-2 4 1.5v2.6a2 2 0 0 1-2.1 2A16.5 16.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z" />),
   logout: (p: IP) => svg(p.size ?? 18, <><path d="M14 4.5H6.5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1H14" /><path d="M10 12h10" /><path d="m16.5 8.5 3.5 3.5-3.5 3.5" /></>, 1.7, "rtl:-scale-x-100"),
+  calendar: (p: IP) => svg(p.size ?? 18, <><rect x="4" y="5.5" width="16" height="14.5" rx="2.5" /><path d="M4 10h16" /><path d="M8.5 3.5v4" /><path d="M15.5 3.5v4" /></>),
   clock: (p: IP) => svg(p.size ?? 18, <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>),
   info: (p: IP) => svg(p.size ?? 18, <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5" /><circle cx="12" cy="8" r=".6" fill="currentColor" /></>),
   money: (p: IP) => svg(p.size ?? 18, <><rect x="3.5" y="6.5" width="17" height="11" rx="2" /><circle cx="12" cy="12" r="2.5" /></>),
@@ -340,18 +342,55 @@ export function SwitchPill(props: { chip: string; children: JSX.Element; onClick
 export function GSheet(props: { open: boolean; onClose: () => void; label: string; children: JSX.Element }) {
   return (
     <Show when={props.open}>
-      <Portal>
-        <div class="fixed inset-0 z-40 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={props.label}
-          ref={el => queueMicrotask(() => el.querySelector<HTMLElement>("[data-autofocus], input, a[href], button:not([data-scrim])")?.focus())}
-          onKeyDown={e => { if (e.key === "Escape") props.onClose(); }}>
-          <button type="button" data-scrim aria-label={t("common.cancel")} class="scrim absolute inset-0 bg-black/40" onClick={() => props.onClose()} />
-          <div class="g-sheet sheet relative max-h-[88dvh] w-full max-w-[480px] overflow-y-auto rounded-t-[32px] px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-3">
-            <div class="mx-auto mb-4 h-1.5 w-10 rounded-full" style={{ background: "var(--g-tick)" }} aria-hidden="true" />
-            <div class="g-sheet-body flex flex-col gap-4">{props.children}</div>
-          </div>
-        </div>
-      </Portal>
+      <SheetPanel label={props.label} onClose={props.onClose}>{props.children}</SheetPanel>
     </Show>
+  );
+}
+
+/** The open sheet: close button, tap outside, swipe down, Escape, or the phone's Back. */
+function SheetPanel(props: { label: string; onClose: () => void; children: JSX.Element }) {
+  const [dy, setDy] = createSignal(0);
+  const [dragging, setDragging] = createSignal(false);
+  let startY = 0;
+  let panel: HTMLDivElement | undefined;
+  const release = openSheet(() => props.onClose());
+  onCleanup(release);
+  const close = () => props.onClose();
+  const down = (e: PointerEvent) => {
+    // Drag from the handle area, or anywhere while the content is scrolled to the top.
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (panel && panel.scrollTop > 0 && !(e.target as HTMLElement).closest("[data-drag]")) return;
+    if ((e.target as HTMLElement).closest("input, textarea, button:not([data-drag]), a, [role=radio], [role=switch]")) return;
+    startY = e.clientY; setDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const move = (e: PointerEvent) => { if (dragging()) setDy(Math.max(0, e.clientY - startY)); };
+  const up = () => {
+    if (!dragging()) return;
+    setDragging(false);
+    if (dy() > 90) close(); else setDy(0);
+  };
+  return (
+    <Portal>
+      <div class="fixed inset-0 z-40 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={props.label}
+        ref={el => queueMicrotask(() => el.querySelector<HTMLElement>("[data-autofocus], input, a[href], button:not([data-scrim]):not([data-close])")?.focus())}
+        onKeyDown={e => { if (e.key === "Escape") close(); }}>
+        <button type="button" data-scrim tabindex="-1" aria-hidden="true" class="scrim absolute inset-0 bg-black/45" onClick={close}
+          style={{ opacity: Math.max(0.2, 1 - dy() / 400) }} />
+        <div ref={el => (panel = el)} class="g-sheet sheet relative max-h-[88dvh] w-full max-w-[480px] overflow-y-auto overscroll-contain rounded-t-[32px] px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-2.5"
+          style={{ transform: `translateY(${dy()}px)`, transition: dragging() ? "none" : "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)", "touch-action": dragging() ? "none" : "pan-y" }}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+          <div data-drag class="sticky top-0 z-10 -mx-5 mb-2 flex h-9 cursor-grab items-start justify-center px-5" style={{ background: "var(--g-bg)" }}>
+            <span class="mt-1 h-1.5 w-10 rounded-full" style={{ background: "var(--g-tick)" }} aria-hidden="true" />
+            <button type="button" data-close aria-label={t("common.close")} onClick={() => { tick(); close(); }}
+              class="absolute end-3 top-0 grid h-9 w-9 place-items-center rounded-full" style={{ background: "var(--g-inner)", color: "var(--g-ink)" }}>
+              <GIcon.x size={15} />
+            </button>
+          </div>
+          <div class="g-sheet-body flex flex-col gap-4">{props.children}</div>
+        </div>
+      </div>
+    </Portal>
   );
 }
 

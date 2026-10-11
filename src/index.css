@@ -9,8 +9,8 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-num: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-num: "Newsreader", Georgia, serif;
 
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -38,52 +38,30 @@
 }
 
 :root {
-  --bg: #eef1ef;
-  --surface: #ffffff;
-  --surface-2: #f5f7f6;
-  --ink: #0d1a16;
-  --ink-2: #4d5f58;
-  --ink-3: #7d8c86;
-  --line: #e0e6e3;
-  --cta: #0d1a16;
-  --cta-ink: #ffffff;
-  --brand: #0f5f4f;
-  --brand-soft: #dcefe8;
-  --turn: #e0a526;
-  --ok: #157a52;
-  --ok-soft: #dff3e9;
-  --warn: #8a5a00;
-  --warn-soft: #fbefd2;
-  --late: #b4232a;
-  --late-soft: #fde4e3;
-  --dock: #0d1a16;
-  --dock-ink: #ffffff;
+  /* Older names, now pointing at the glass design's tokens (one look across the app). */
+  --bg: var(--g-bg);
+  --surface: var(--g-card-strong);
+  --surface-2: var(--g-inner);
+  --ink: var(--g-ink);
+  --ink-2: var(--g-ink-2);
+  --ink-3: var(--g-muted);
+  --line: var(--g-divider);
+  --cta: var(--g-cta);
+  --cta-ink: var(--g-cta-ink);
+  --brand: var(--g-emerald);
+  --brand-soft: var(--g-green-soft);
+  --turn: #d9a227;
+  --ok: var(--g-emerald);
+  --ok-soft: var(--g-green-soft);
+  --warn: var(--g-amber);
+  --warn-soft: var(--g-amber-soft);
+  --late: var(--g-red);
+  --late-soft: var(--g-red-soft);
+  --dock: var(--g-cta);
+  --dock-ink: var(--g-cta-ink);
   color-scheme: light;
 }
-
-:root[data-theme="dark"] {
-  --bg: #090e0c;
-  --surface: #131a17;
-  --surface-2: #1b2420;
-  --ink: #eef4f1;
-  --ink-2: #a3b2ab;
-  --ink-3: #74837c;
-  --line: #24302b;
-  --cta: #eef4f1;
-  --cta-ink: #0d1a16;
-  --brand: #3fb08c;
-  --brand-soft: #173a30;
-  --turn: #f2b84b;
-  --ok: #4cc791;
-  --ok-soft: #133528;
-  --warn: #f2c14e;
-  --warn-soft: #3a2f12;
-  --late: #ff7b72;
-  --late-soft: #3d1a1a;
-  --dock: #eef4f1;
-  --dock-ink: #0d1a16;
-  color-scheme: dark;
-}
+:root[data-theme="dark"] { color-scheme: dark; }
 
 /* ── Native feel ── */
 html {
@@ -243,11 +221,13 @@ html[dir="rtl"][data-nav="back"]::view-transition-new(root) { animation-name: in
   --g-num: "Newsreader", Georgia, serif;
   font-family: var(--g-sans);
   color: var(--g-ink);
+  line-height: normal;
+}
+.g {
   background-color: var(--g-bg);
   min-height: 100dvh;
   position: relative;
   isolation: isolate;
-  line-height: normal;
 }
 html[lang="ur"] .g, html[lang="ur"] .g-sheet { --g-serif: "Noto Sans Arabic", ui-sans-serif, sans-serif; --g-sans: "Noto Sans Arabic", "Manrope", ui-sans-serif, sans-serif; }
 /* Soft colour blobs behind the glass; mirrored for right-to-left. */

@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, Loading, Show } from "solid-js";
-import { activateCommittee, createInvitation, latestInvitation, leaveCommittee, type Dashboard } from "../../lib/api";
+import { activateCommittee, createInvitation, latestInvitation, leaveCommittee, updateCommittee, type Dashboard } from "../../lib/api";
+import { DateField } from "../../ui/pickers";
 import { describeError } from "../../lib/errors";
 import { back, navigate } from "../../lib/router";
 import { setCurrent } from "../../lib/current";
@@ -51,14 +52,27 @@ export function InviteG(props: { d: Dashboard; onChange: () => void }) {
     catch (e) { setError(describeError(e)); setHelp(false); }
   };
   const owner = () => props.d.members.find(m => m.role === "owner");
+  const passed = () => c().start_date < todayInPKT();
+  // The schedule is built from the start date when the committee starts, so it can move until then.
+  const moveStart = async (date: string) => {
+    setError("");
+    try {
+      await updateCommittee(c().id, {
+        name: c().name, description: c().description, instructions: c().instructions, startDate: date,
+        accountTitle: c().account_title, accountNumber: c().account_number,
+        receiveLimitPaisa: props.d.month.receive_limit_paisa, sendLimitPaisa: props.d.month.send_limit_paisa
+      });
+      props.onChange();
+    } catch (e) { setError(describeError(e)); }
+  };
 
   return (
     <GScreen title={t("iv.title")} bottom={
       <>
         <Halo w={64} label={t("common.back")} onClick={() => back("/")}><GIcon.undo /></Halo>
-        <Show when={isOwner() && full()} fallback={
+        <Show when={isOwner() && full() && !passed()} fallback={
           <div class="g-halo flex-1" style={{ height: "64px" }}><span class="g-core px-3 text-center text-[13px]" style={{ color: "var(--g-muted)" }}>
-            {full() ? t("iv.waitingOrg", { name: owner()?.name.split(/\s+/)[0] ?? "" }) : t("iv.startsWhen", { n: total() })}
+            {full() && isOwner() ? t("hl.newDate") : full() ? t("iv.waitingOrg", { name: owner()?.name.split(/\s+/)[0] ?? "" }) : t("iv.startsWhen", { n: total() })}
           </span></div>
         }>
           <SlideToConfirm label={t("iv.slide")} busyLabel={t("iv.starting")} chevrons onConfirm={start} />
@@ -115,7 +129,13 @@ export function InviteG(props: { d: Dashboard; onChange: () => void }) {
       <p class="mt-3 text-center text-[12px]" style={{ color: "var(--g-muted)" }}>
         {full() ? t("iv.startsOn", { date: dateShort(c().start_date) }) : t("iv.startsWhen", { n: total() })}
       </p>
-      <Show when={full() && isOwner() && c().start_date < todayInPKT()}><div class="mt-3"><GNote tone="error">{t("err.startPast")}</GNote></div></Show>
+      <Show when={isOrg()}>
+        <div class="mt-4">
+          <p class="mb-2 px-1 text-[13px]" style={{ color: "var(--g-ink-2)" }}>{t("iv.startDate")}</p>
+          <DateField value={c().start_date} min={todayInPKT()} label={t("iv.startDate")} onChange={d => void moveStart(d)} />
+        </div>
+      </Show>
+      <Show when={passed()}><div class="mt-3"><GNote tone="error">{t("iv.startPassed")}</GNote></div></Show>
       <Show when={error()}><div class="mt-3"><GNote tone="error">{error()}</GNote></div></Show>
 
       <GSheet open={help()} onClose={() => setHelp(false)} label={t("g.p.help")}>
