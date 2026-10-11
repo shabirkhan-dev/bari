@@ -132,10 +132,12 @@ export interface Dashboard {
     sent_paisa: number;
     payouts_due_paisa: number;
   };
+  /** Daily cutoff, "HH:MM" Pakistan time ("Closes 9 pm"). */
+  cutoff: string;
 }
 
 export async function getDashboard(committeeId: string): Promise<Dashboard> {
-  const { data, error } = await supabase.rpc("committee_dashboard_v2", { p_committee_id: committeeId });
+  const { data, error } = await supabase.rpc("committee_dashboard_v3", { p_committee_id: committeeId });
   if (error) fail(error);
   return data as Dashboard;
 }
@@ -222,8 +224,17 @@ export interface ReviewItem {
   due_dates: string[];
   receipt_path: string | null;
   receipt_type: string | null;
+  receipt_size: number | null;
+  receipt_created_at: string | null;
+  /** What the member's phone read off the receipt (not proof by itself). */
+  receipt_amount_paisa: number | null;
+  receipt_successful: boolean | null;
+  periods: PeriodRef[] | null;
   can_decide: boolean;
 }
+
+/** A contribution's place in the schedule: round 3, day 18. */
+export interface PeriodRef { round: number; n: number }
 
 export async function reviewQueue(committeeId: string): Promise<ReviewItem[]> {
   const { data, error } = await supabase.rpc("review_queue", { p_committee_id: committeeId });
@@ -366,5 +377,41 @@ export async function unreadCount(): Promise<number> {
 
 export async function markAllRead() {
   const { error } = await supabase.from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null);
+  if (error) fail(error);
+}
+
+/* ───────────── Ledger & receipts (design screens) ───────────── */
+
+export interface LedgerRound {
+  round: number; first_due: string; toss_date: string;
+  total_paisa: number; paid_paisa: number; waiting_paisa: number; unpaid_paisa: number;
+}
+export interface LedgerDay { id: string; due_date: string; state: ObligationState; amount_paisa: number; n: number }
+export interface LedgerEntry {
+  id: string; created_at: string; amount_paisa: number; status: "pending" | "verified" | "rejected" | "disputed";
+  decision_reason: string | null; decided_at: string | null; tid: string | null; paid_by_name: string | null;
+  periods: PeriodRef[] | null;
+}
+export interface Ledger {
+  today: string; member_id: string; current_round: number; periods_per_round: number;
+  rounds: LedgerRound[]; days: LedgerDay[]; history: LedgerEntry[];
+}
+
+export async function myLedger(committeeId: string): Promise<Ledger> {
+  const { data, error } = await supabase.rpc("my_ledger", { p_committee_id: committeeId });
+  if (error) fail(error);
+  return data as Ledger;
+}
+
+export async function recordReceiptReading(submissionId: string, amountPaisa: number | null, successful: boolean | null) {
+  if (amountPaisa === null && successful === null) return;
+  const { error } = await supabase.rpc("record_receipt_reading", {
+    p_submission_id: submissionId, p_amount_paisa: amountPaisa, p_successful: successful
+  });
+  if (error) fail(error);
+}
+
+export async function setDailyCutoff(committeeId: string, hhmm: string) {
+  const { error } = await supabase.rpc("set_daily_cutoff", { p_committee_id: committeeId, p_cutoff: hhmm });
   if (error) fail(error);
 }

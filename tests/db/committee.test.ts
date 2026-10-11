@@ -144,6 +144,9 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     const ids = (await roundOneIds("m3")).slice(0, 2);
     const req = randomUUID();
     m3Sub = await rpc("m3", "submit_payment", [members.m3, ids, 40000, "726755086850", "2026-11-02T20:16:00+05:00", null, null, req]);
+    // What the phone read off the receipt; only the payer can record it, only while pending.
+    await rpc("m3", "record_receipt_reading", [m3Sub, 40000, true]);
+    await expect(rpc("m4", "record_receipt_reading", [m3Sub, 1, true])).rejects.toThrow(/not found/i);
     expect(await rpc("m3", "submit_payment", [members.m3, ids, 40000, "726755086850", null, null, null, req])).toBe(m3Sub); // retry
     const states = (await as("m4", "select state from contribution_obligations where id = any($1)", [ids])).rows.map(r => r.state);
     expect(states).toEqual(["submitted", "submitted"]);
@@ -169,6 +172,8 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
 
     const q = (await as("owner", "select public.review_queue($1) q", [committeeId])).rows[0].q;
     expect(q).toHaveLength(1);
+    expect(q[0]).toMatchObject({ receipt_amount_paisa: 40000, receipt_successful: true,
+      periods: [{ round: 1, n: 1 }, { round: 1, n: 2 }] });
     expect(q[0]).toMatchObject({ id: m3Sub, member_name: "m3", amount_paisa: 40000, tid: "726755086850",
       due_dates: ["2026-11-01", "2026-11-02"], can_decide: true, receipt_path: null });
     expect((await as("m3", "select public.review_queue($1) q", [committeeId])).rows[0].q).toEqual([]); // not an organizer
@@ -246,6 +251,29 @@ describe.skipIf(!url)("database: committee lifecycle", () => {
     expect(m5).toMatchObject({ overdue_paisa: 580000, overdue_count: 29, today_state: "due", paid_out: false });
     expect(d.members.filter((m: any) => m.paid_out)).toHaveLength(1);
     await expect(as("outsider", "select public.committee_dashboard($1)", [committeeId])).rejects.toThrow(/Not a member/);
+  });
+
+  it("gives each member a ledger: per-round totals, this round's days, history", async () => {
+    const m5 = await rpc("m5", "my_ledger", [committeeId]);
+    expect(m5).toMatchObject({ today: "2026-11-30", current_round: 1, periods_per_round: 30 });
+    expect(m5.rounds).toHaveLength(5);
+    expect(m5.rounds[0]).toMatchObject({ round: 1, total_paisa: 600000, paid_paisa: 0, waiting_paisa: 0, unpaid_paisa: 600000 });
+    expect(m5.rounds[1]).toMatchObject({ round: 2, total_paisa: 600000, unpaid_paisa: 0 });
+    expect(m5.days).toHaveLength(30);
+    expect(m5.days[17]).toMatchObject({ n: 18, state: "due", amount_paisa: 20000 });
+    expect(m5.history).toEqual([]);
+    const m3 = await rpc("m3", "my_ledger", [committeeId]);
+    expect(m3.rounds[0]).toMatchObject({ paid_paisa: 600000, unpaid_paisa: 0 });
+    expect(m3.history[m3.history.length - 1]).toMatchObject({ amount_paisa: 40000, status: "verified",
+      periods: [{ round: 1, n: 1 }, { round: 1, n: 2 }] });
+    await expect(rpc("outsider", "my_ledger", [committeeId])).rejects.toThrow(/Not a member/);
+  });
+
+  it("has a daily cutoff organizers can change", async () => {
+    expect((await rpc("m3", "committee_dashboard_v3", [committeeId])).cutoff).toBe("21:00");
+    await expect(rpc("m3", "set_daily_cutoff", [committeeId, "20:00"])).rejects.toThrow(/organizers/);
+    await rpc("owner", "set_daily_cutoff", [committeeId, "22:30"]);
+    expect((await rpc("m3", "committee_dashboard_v3", [committeeId])).cutoff).toBe("22:30");
   });
 
   it("gives each member a home summary of their own dues", async () => {
